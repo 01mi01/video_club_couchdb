@@ -14,12 +14,17 @@
  *     original_language:  "string",      // idioma original
  *     english_title:      "string",
  *     alternative_titles: ["string", ...],
- *     // ...y ADEMÁS se mantiene un arreglo plano denormalizado con TODOS
- *     // los títulos. Ese arreglo es lo que se indexa con Mango para la
- *     // "búsqueda por nombre": un solo índice cubre cualquier variante
- *     // del título (original, inglés, alternativo) sin tener que hacer
- *     // OR entre varios campos. Se recalcula en cada escritura.
- *     all_titles: ["string", ...],
+ *     // ...y ADEMÁS dos arreglos planos denormalizados con TODOS los
+ *     // títulos, recalculados en cada escritura:
+ *     //   all_titles    -> para MOSTRAR (tal cual, con acentos/mayúsculas).
+ *     //   search_titles -> para BUSCAR: cada título "plegado" (Unicode NFD,
+ *     //                    sin marcas diacríticas, en minúsculas). Es este
+ *     //                    el que indexa Mango (idx-search-titles), porque
+ *     //                    `$regex` no compara insensible a acentos y el
+ *     //                    enunciado exige buscar por nombre en español.
+ *     //                    Ver `foldForSearch` en services/videoService.js.
+ *     all_titles:    ["string", ...],
+ *     search_titles: ["string", ...],
  *
  *     duration_minutes: number,          // duración en minutos
  *     genre_ids: ["genre:<uuid>", ...],  // REFERENCIA a géneros normalizados

@@ -51,14 +51,22 @@ const { db } = require('../config/db');
  */
 const INDEXES = [
   {
-    ddoc: 'idx-titles',
-    name: 'idx-titles',
-    // `all_titles` es el arreglo plano con TODOS los títulos de la
-    // película (principal, original, inglés, alternativos). Indexarlo
-    // permite una sola consulta para "buscar por nombre" cubriendo
-    // cualquier variante del título.
-    fields: ['all_titles'],
-    why: 'Gestión de Préstamos 1: "Buscar película por nombre".',
+    ddoc: 'idx-search-titles',
+    name: 'idx-search-titles',
+    // `search_titles` es el arreglo plano con TODOS los títulos de la
+    // película (principal, original, inglés, alternativos) YA PLEGADOS:
+    // sin acentos y en minúsculas (ver `foldForSearch` en
+    // `services/videoService.js`). Se indexa la forma plegada, no
+    // `all_titles`, porque Mango no hace comparación insensible a acentos:
+    // buscar "nomadas" debe encontrar "Nómadas". La consulta aplica el
+    // mismo plegado al texto buscado.
+    //
+    // (Sustituye al antiguo índice `idx-titles` sobre `all_titles`, que ya
+    // no respalda ninguna búsqueda: `all_titles` se conserva solo para
+    // mostrar. `scripts/backfill-search-titles.js` elimina ese índice
+    // viejo y rellena `search_titles` en los documentos ya existentes.)
+    fields: ['search_titles'],
+    why: 'Gestión de Préstamos 1: "Buscar película por nombre" (insensible a acentos/mayúsculas).',
   },
   {
     ddoc: 'idx-genres',

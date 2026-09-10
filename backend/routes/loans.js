@@ -7,7 +7,8 @@ router.post('/quote', asyncHandler(c.quote)); //          POST /api/loans/quote 
 router.post('/', asyncHandler(c.create)); //              POST /api/loans               (registrar préstamo + factura)
 router.get('/', asyncHandler(c.list)); //                 GET  /api/loans
 router.get('/:id', asyncHandler(c.getById)); //           GET  /api/loans/:id
-router.post('/:id/return', asyncHandler(c.return)); //    POST /api/loans/:id/return     (registrar devolución)
+router.post('/:id/return', asyncHandler(c.return)); //    POST /api/loans/:id/return     (registrar devolución tardía / normal)
+router.post('/:id/write-off', asyncHandler(c.writeOff)); // POST /api/loans/:id/write-off (baja por NO DEVOLUCIÓN: retira copia(s) + cierra préstamo)
 router.get('/:id/invoice', asyncHandler(c.invoiceByLoan)); // GET /api/loans/:id/invoice (factura del préstamo)
 
 module.exports = router;

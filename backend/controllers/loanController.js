@@ -27,6 +27,12 @@ exports.return = async (req, res) => {
   res.json(await loanService.returnLoan(req.params.id, req.body || {}));
 };
 
+// Baja por NO DEVOLUCIÓN: da de baja la(s) copia(s) del préstamo vencido
+// que nunca volvieron y cierra el préstamo como "unreturned".
+exports.writeOff = async (req, res) => {
+  res.json(await loanService.writeOffUnreturned(req.params.id, req.body || {}));
+};
+
 // Factura del préstamo.
 exports.invoiceByLoan = async (req, res) => {
   res.json(await loanService.getInvoiceByLoan(req.params.id));

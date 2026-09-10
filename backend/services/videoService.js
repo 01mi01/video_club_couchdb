@@ -15,6 +15,7 @@
 
 const videoRepo = require('../repositories/videoRepository');
 const genreRepo = require('../repositories/genreRepository');
+const loanRepo = require('../repositories/loanRepository');
 const { badRequest, notFound, conflict } = require('../utils/errors');
 
 /* ---------------------------------------------------------------------------
@@ -23,15 +24,54 @@ const { badRequest, notFound, conflict } = require('../utils/errors');
 
 /**
  * Construye el arreglo plano `all_titles` (sin vacíos ni duplicados) a
- * partir de los campos estructurados. Es lo que indexa Mango para la
- * "búsqueda por nombre": un único índice cubre título principal, original,
- * inglés y alternativos.
+ * partir de los campos estructurados. `all_titles` se conserva TAL CUAL
+ * (con acentos y mayúsculas) para mostrarlo en la app / API.
+ * La búsqueda NO se hace contra este campo, sino contra `search_titles`
+ * (ver `foldForSearch` / `buildSearchTitles`).
  */
 function buildAllTitles({ display_title, original_title, english_title, alternative_titles }) {
   const all = [display_title, original_title, english_title, ...(alternative_titles || [])]
     .map((t) => (typeof t === 'string' ? t.trim() : ''))
     .filter(Boolean);
   return [...new Set(all)];
+}
+
+/**
+ * NORMALIZACIÓN PARA BÚSQUEDA POR NOMBRE  (problema complejo resuelto)
+ * ---------------------------------------------------------------------------
+ * CouchDB/Mango NO tiene búsqueda "collation-aware": `$regex` distingue
+ * acentos ("nomadas" != "nómadas") y no existe un operador que haga
+ * *folding* de diacríticos. `(?i)` solo cubre mayúsculas/minúsculas.
+ *
+ * Como el enunciado exige buscar películas por nombre y el español usa
+ * acentos constantemente, se resuelve DENORMALIZANDO: en cada escritura se
+ * calcula `search_titles` = cada título de `all_titles` pasado por
+ * `foldForSearch` (Unicode NFD -> se quitan las marcas diacríticas
+ * combinantes U+0300–U+036F -> minúsculas -> espacios colapsados). La
+ * consulta aplica EXACTAMENTE la misma transformación al texto buscado y
+ * hace un `$regex` de subcadena contra `search_titles`. Así "nomadas",
+ * "NÓMADAS" y "Nómadas" caen todas en la misma forma canónica.
+ *
+ * Es el mismo patrón que ya se usaba con `all_titles` (aplanar varios
+ * campos en un arreglo indexable), llevado un paso más allá para que la
+ * comparación sea insensible a acentos y a mayúsculas.
+ *
+ * NOTA (Parte A: Consistencia): `search_titles` es un campo derivado que
+ * se recalcula en la aplicación en cada `create`/`update`; el índice Mango
+ * sobre él se reconstruye de forma asíncrona -> consistencia eventual.
+ */
+function foldForSearch(s) {
+  return String(s || '')
+    .normalize('NFD') // separa cada letra acentuada en letra base + marca combinante
+    .replace(/\p{M}/gu, '') // elimina esas marcas: á->a, ñ->n, ü->u, é->e ...
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/** `all_titles` -> forma canónica para búsqueda (sin acentos, minúsculas). */
+function buildSearchTitles(allTitles) {
+  return [...new Set((allTitles || []).map(foldForSearch).filter(Boolean))];
 }
 
 function escapeRegex(s) {
@@ -56,7 +96,8 @@ async function normalizeVideoInput(body, { partial = false } = {}) {
     out.alternative_titles = Array.isArray(body.alternative_titles)
       ? body.alternative_titles.map((t) => String(t).trim()).filter(Boolean)
       : [];
-    out.all_titles = buildAllTitles(out);
+    out.all_titles = buildAllTitles(out); // para mostrar (con acentos)
+    out.search_titles = buildSearchTitles(out.all_titles); // para buscar (sin acentos, minúsculas)
   }
 
   // --- Duración ---
@@ -185,9 +226,11 @@ async function update(id, body) {
   const patch = await normalizeVideoInput(body, { partial: true });
   return videoRepo.update(id, (doc) => {
     Object.assign(doc, patch);
-    // Si cambió algún título, `all_titles` se reconstruye con los valores
-    // ya fusionados en el documento.
+    // Si cambió algún título, `all_titles` (para mostrar) y `search_titles`
+    // (forma canónica sin acentos, para buscar) se reconstruyen con los
+    // valores ya fusionados en el documento.
     doc.all_titles = buildAllTitles(doc);
+    doc.search_titles = buildSearchTitles(doc.all_titles);
     return doc;
   });
 }
@@ -212,27 +255,69 @@ async function addCopies(id, body) {
 
 /**
  * 3. Registrar la BAJA de una copia (fecha + razón).
- * Reglas: la copia debe existir, no estar ya de baja, y no estar prestada
- * (una copia prestada no se puede dar de baja hasta que vuelva).
+ *
+ * Casos (el enunciado exige explícitamente la razón "no devuelto"):
+ *
+ *  - Copia DISPONIBLE  -> baja directa (un solo documento).
+ *  - Copia PRESTADA + razón de NO DEVOLUCIÓN ("no devuelto", "not
+ *    returned", "perdida"...) -> es la salida manual para un préstamo
+ *    vencido que nunca volvió: se delega en
+ *    `loanService.writeOffUnreturned`, que da de baja la copia Y cierra el
+ *    préstamo asociado como "unreturned" en una sola operación
+ *    `_bulk_docs` (video + préstamo + factura). Sin esto quedaría un
+ *    préstamo "active" apuntando a una copia "retired" -> inconsistencia.
+ *  - Copia PRESTADA + cualquier otra razón (p.ej. "robo") -> se sigue
+ *    exigiendo registrar antes la devolución: una copia que físicamente
+ *    está con un cliente no se "roba" del videoclub.
+ *
+ * NOTA: NINGÚN proceso automático da de baja copias. Un préstamo vencido
+ * permanece "active" y su copia "loaned" hasta que el propietario ejecuta
+ * una de las dos salidas manuales (devolución tardía o esta baja).
  */
+const NO_RETURN_REASON = /no\s*devuelt|not\s*returned|sin\s*devoluci|perdid|lost/i;
+
 async function retireCopy(id, copyId, body) {
   const reason = (body.reason || '').trim();
   if (!reason) throw badRequest('La baja requiere `reason` (no devuelto, robo, etc.).');
   const date = body.date || new Date().toISOString();
 
-  return videoRepo.update(id, (doc) => {
-    const copy = (doc.copies || []).find((c) => c.copy_id === copyId);
-    if (!copy) throw notFound(`Copia ${copyId} no existe en el video ${id}.`);
-    if (copy.status === 'retired') {
-      throw conflict(`La copia ${copyId} ya está dada de baja.`);
-    }
-    if (copy.status === 'loaned') {
+  // Lectura previa para decidir el camino (disponible vs prestada).
+  const video = await videoRepo.getById(id);
+  const copy = (video.copies || []).find((c) => c.copy_id === copyId);
+  if (!copy) throw notFound(`Copia ${copyId} no existe en el video ${id}.`);
+  if (copy.status === 'retired') {
+    throw conflict(`La copia ${copyId} ya está dada de baja.`);
+  }
+
+  if (copy.status === 'loaned') {
+    if (!NO_RETURN_REASON.test(reason)) {
       throw conflict(
-        `La copia ${copyId} está prestada. Debe registrarse su devolución antes de darla de baja.`
+        `La copia ${copyId} está prestada. Registra su devolución antes de darla de baja ` +
+          `(salvo que la razón sea "no devuelto").`
       );
     }
-    copy.status = 'retired';
-    copy.retirement = { date, reason };
+    // Buscar el préstamo activo que tiene esta copia y cerrarlo como no
+    // devuelto. `require` diferido para no crear ciclo de módulos.
+    const loans = await loanRepo.listLoans();
+    const loan = loans.find(
+      (l) =>
+        l.status === 'active' &&
+        (l.items || []).some((it) => it.video_id === id && it.copy_id === copyId)
+    );
+    if (loan) {
+      const loanService = require('./loanService');
+      return loanService.writeOffUnreturned(loan._id, { reason, date });
+    }
+    // Copia "loaned" sin préstamo activo asociado (inconsistencia previa):
+    // se da de baja igual, best-effort.
+  }
+
+  return videoRepo.update(id, (doc) => {
+    const c = (doc.copies || []).find((x) => x.copy_id === copyId);
+    if (!c) throw notFound(`Copia ${copyId} no existe en el video ${id}.`);
+    if (c.status === 'retired') throw conflict(`La copia ${copyId} ya está dada de baja.`);
+    c.status = 'retired';
+    c.retirement = { date, reason };
     return doc;
   });
 }
@@ -254,9 +339,17 @@ async function search(query) {
   let useIndex;
 
   if (title && title.trim()) {
-    // Índice: idx-titles  sobre `all_titles`  -> búsqueda por NOMBRE.
-    and.push({ all_titles: { $elemMatch: { $regex: `(?i)${escapeRegex(title.trim())}` } } });
-    useIndex = useIndex || 'idx-titles';
+    // Índice: idx-search-titles sobre `search_titles` -> búsqueda por NOMBRE.
+    //
+    // `search_titles` guarda cada título ya "plegado" (sin acentos, en
+    // minúsculas). Se aplica la MISMA transformación (`foldForSearch`) al
+    // texto buscado, así la comparación es insensible a acentos y a
+    // mayúsculas: "nomadas", "NÓMADAS" y "Nómadas" buscan lo mismo.
+    // Como ambos lados ya están en minúsculas y sin acentos, el `$regex`
+    // es una simple coincidencia de subcadena (sin `(?i)`).
+    const needle = foldForSearch(title);
+    and.push({ search_titles: { $elemMatch: { $regex: escapeRegex(needle) } } });
+    useIndex = useIndex || 'idx-search-titles';
   }
   if (genreId && genreId.trim()) {
     // Índice: idx-genres  sobre `genre_ids`  -> búsqueda por GÉNERO
@@ -306,6 +399,10 @@ module.exports = {
   addCopies,
   retireCopy,
   search,
-  // exportado para pruebas manuales / reuso
+  // exportado para pruebas manuales / reuso y para el backfill
+  // (`scripts/backfill-search-titles.js`) — fuente única de la lógica de
+  // plegado, para que la forma guardada y la forma buscada nunca difieran.
   buildAllTitles,
+  buildSearchTitles,
+  foldForSearch,
 };

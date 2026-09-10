@@ -337,8 +337,10 @@ async function returnLoan(loanId, body) {
   return withConflictRetry(
     async () => {
       const loan = await loanRepo.getLoan(loanId);
-      if (loan.status === 'returned') {
-        throw conflict('Este préstamo ya fue devuelto.');
+      if (loan.status !== 'active') {
+        // "returned" (ya devuelto) o "unreturned" (cerrado por no
+        // devolución). En ambos casos el préstamo ya no está abierto.
+        throw conflict(`Este préstamo ya está cerrado (status "${loan.status}").`);
       }
       if (new Date(returnDate).getTime() < new Date(loan.loan_date).getTime()) {
         throw badRequest('La fecha de devolución no puede ser anterior al préstamo.');
@@ -433,6 +435,114 @@ async function returnLoan(loanId, body) {
   );
 }
 
+/* ===========================================================================
+ * CASO DE USO 4: BAJA POR NO DEVOLUCIÓN
+ * ------------------------------------------------------------------------- *
+ * Salida manual para un préstamo VENCIDO que el cliente nunca devolvió.
+ *
+ * IMPORTANTE (para la presentación): NO existe ningún proceso automático,
+ * cron ni scheduler que marque copias como perdidas al pasar `due_date`.
+ * Un préstamo vencido queda EXACTAMENTE igual ("active", copia "loaned")
+ * hasta que el propietario decide una de dos cosas:
+ *   (a) que la copia volvió tarde  -> `returnLoan` (calcula recargo/nota).
+ *   (b) que la copia NO va a volver -> esta función.
+ *
+ * Esta función, en UNA sola operación `_bulk_docs` (video[s] + préstamo +
+ * factura), con la misma estrategia compensable que la devolución:
+ *   - da de baja cada copia del préstamo que siga "loaned"
+ *     (`retirement.reason` = razón indicada, por defecto "no devuelto"),
+ *   - cierra el préstamo con status "unreturned" (estado terminal
+ *     distinto de "returned": la copia NO regresó; `return_date` = null),
+ *   - anota la factura. El importe pactado NO se modifica: se debe igual.
+ * ======================================================================== */
+async function writeOffUnreturned(loanId, body = {}) {
+  const reason = (body.reason || 'no devuelto').trim() || 'no devuelto';
+  const date = body.date || new Date().toISOString();
+
+  return withConflictRetry(
+    async () => {
+      const loan = await loanRepo.getLoan(loanId);
+      if (loan.status !== 'active') {
+        throw conflict(
+          `El préstamo ya está cerrado (status "${loan.status}"); no se puede dar de baja por no devolución.`
+        );
+      }
+
+      // Agrupar copias del préstamo por video.
+      const touched = new Map(); // videoId -> Set(copyId)
+      for (const it of loan.items) {
+        if (!touched.has(it.video_id)) touched.set(it.video_id, new Set());
+        touched.get(it.video_id).add(it.copy_id);
+      }
+
+      const now = new Date().toISOString();
+      const videoDocsToSave = [];
+      const retiredCopies = [];
+      for (const [videoId, copyIds] of touched) {
+        const v = await videoRepo.getById(videoId);
+        for (const c of v.copies) {
+          // `!== 'retired'` (en vez de `=== 'loaned'`) para que un reintento
+          // tras un fallo parcial + compensación converja igual.
+          if (copyIds.has(c.copy_id) && c.status !== 'retired') {
+            c.status = 'retired';
+            c.retirement = { date, reason, loan_id: loan._id };
+            retiredCopies.push({ video_id: videoId, copy_id: c.copy_id });
+          }
+        }
+        v.updated_at = now;
+        v.__touchedCopies = [...copyIds];
+        videoDocsToSave.push(v);
+      }
+
+      const updatedLoan = {
+        ...loan,
+        status: 'unreturned',
+        return_date: null, // nunca se devolvió
+        closed_at: now,
+        closure: { kind: 'unreturned', reason, date, copies: retiredCopies },
+        updated_at: now,
+      };
+
+      const invoice = await loanRepo.getInvoice(loan.invoice_id);
+      const retiredList = retiredCopies.map((c) => c.copy_id).join(', ') || '(ninguna seguía prestada)';
+      const updatedInvoice = {
+        ...invoice,
+        note:
+          `Préstamo cerrado por NO DEVOLUCIÓN (${date}). ` +
+          `Copia(s) dada(s) de baja: ${retiredList}. ` +
+          `El importe pactado (${invoice.total} ${invoice.currency}) se mantiene.`,
+        updated_at: now,
+      };
+
+      const sent = [...videoDocsToSave, updatedLoan, updatedInvoice];
+      const payload = sent.map((d) => {
+        const { __touchedCopies, ...clean } = d;
+        return clean;
+      });
+
+      const result = await loanRepo.bulk(payload);
+      if (result.hasErrors) {
+        await compensate(result, sent);
+        const allConflicts = result.errors.every((e) => e.error === 'conflict');
+        const err = new Error(
+          `Fallo parcial al dar de baja por no devolución (${result.errors.length} doc con error).`
+        );
+        err.statusCode = allConflicts ? 409 : 500;
+        err.details = result.errors;
+        throw err;
+      }
+
+      const revById = Object.fromEntries(result.results.map((r) => [r.id, r.rev]));
+      return {
+        loan: { ...updatedLoan, _rev: revById[updatedLoan._id] },
+        invoice: { ...updatedInvoice, _rev: revById[updatedInvoice._id] },
+        retired_copies: retiredCopies,
+      };
+    },
+    { label: 'baja por no devolución', retries: 4 }
+  );
+}
+
 /* ---------------------------------------------------------------------------
  * Lecturas
  * ------------------------------------------------------------------------- */
@@ -457,6 +567,7 @@ module.exports = {
   createLoan,
   quoteLoan,
   returnLoan,
+  writeOffUnreturned,
   listLoans,
   getLoan,
   getInvoiceByLoan,

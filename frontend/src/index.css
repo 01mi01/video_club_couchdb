@@ -1,0 +1,108 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    color-scheme: light;
+  }
+  body {
+    @apply bg-paper text-ink font-sans antialiased;
+  }
+  h1, h2, h3, h4 {
+    @apply font-display text-ink;
+  }
+  /* Etiqueta de campo / seccion: mayusculas espaciadas, aire editorial. */
+  .eyebrow {
+    @apply text-[11px] font-semibold uppercase tracking-label text-ink-soft;
+  }
+}
+
+@layer components {
+  /* Motivo grafico recurrente: "arcoiris" en lineas rectas, de azul
+     oscuro a naranja-rojizo. Se usa como acento estructural, no en cada
+     componente. */
+  .rainbow-stripe {
+    height: 4px;
+    width: 100%;
+    background: linear-gradient(
+      to right,
+      #1a3852 0%,
+      #1a3852 20%,
+      #0d9797 20%,
+      #0d9797 40%,
+      #f7b239 40%,
+      #f7b239 60%,
+      #f19a29 60%,
+      #f19a29 80%,
+      #c1502e 80%,
+      #c1502e 100%
+    );
+  }
+  .rainbow-stripe-thin {
+    height: 2px;
+  }
+
+  .card {
+    @apply border-2 border-ink bg-white shadow-card;
+  }
+
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 border-2 border-ink px-4 py-2
+      text-sm font-semibold uppercase tracking-label transition-colors
+      disabled:cursor-not-allowed disabled:opacity-40;
+  }
+  .btn-primary {
+    @apply bg-ink text-paper hover:bg-[#12293d];
+  }
+  .btn-accent {
+    @apply bg-gold text-ink hover:bg-orange;
+  }
+  .btn-ghost {
+    @apply bg-transparent text-ink hover:bg-cream;
+  }
+  .btn-danger {
+    @apply border-rust bg-rust text-white hover:bg-[#a94225];
+  }
+  .btn-sm {
+    @apply px-2.5 py-1 text-xs;
+  }
+
+  .input {
+    @apply w-full border-2 border-ink bg-white px-3 py-2 text-sm text-ink
+      placeholder:text-ink-soft/60 focus:outline-none focus:ring-2 focus:ring-teal;
+  }
+  .label {
+    @apply mb-1 block text-[11px] font-semibold uppercase tracking-label text-ink-soft;
+  }
+
+  .table-editorial {
+    @apply w-full border-collapse text-sm;
+  }
+  .table-editorial thead th {
+    @apply border-b-2 border-ink px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-label text-ink-soft;
+  }
+  .table-editorial tbody td {
+    @apply border-b border-ink-line px-3 py-2 align-middle text-ink;
+  }
+  .table-editorial tbody tr:hover {
+    @apply bg-cream/40;
+  }
+}
+
+/* --- Impresion de facturas: solo se ve la factura --- */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  .print-area {
+    position: absolute;
+    inset: 0;
+    margin: 0;
+    padding: 24px;
+    background: #fff;
+  }
+  body {
+    background: #fff;
+  }
+}

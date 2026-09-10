@@ -274,12 +274,15 @@ async function addCopies(id, body) {
  * permanece "active" y su copia "loaned" hasta que el propietario ejecuta
  * una de las dos salidas manuales (devolución tardía o esta baja).
  */
-const NO_RETURN_REASON = /no\s*devuelt|not\s*returned|sin\s*devoluci|perdid|lost/i;
+// Se compara contra la razón YA PLEGADA (sin acentos, minúsculas) para que
+// "pérdida", "no devolución", "extraviada" también cuenten como no devolución.
+const NO_RETURN_REASON = /no\s*devuelt|not\s*returned|sin\s*devoluci|no\s*devoluci|perdid|extravi|lost/i;
 
 async function retireCopy(id, copyId, body) {
   const reason = (body.reason || '').trim();
   if (!reason) throw badRequest('La baja requiere `reason` (no devuelto, robo, etc.).');
   const date = body.date || new Date().toISOString();
+  const isNoReturn = NO_RETURN_REASON.test(foldForSearch(reason));
 
   // Lectura previa para decidir el camino (disponible vs prestada).
   const video = await videoRepo.getById(id);
@@ -290,7 +293,7 @@ async function retireCopy(id, copyId, body) {
   }
 
   if (copy.status === 'loaned') {
-    if (!NO_RETURN_REASON.test(reason)) {
+    if (!isNoReturn) {
       throw conflict(
         `La copia ${copyId} está prestada. Registra su devolución antes de darla de baja ` +
           `(salvo que la razón sea "no devuelto").`

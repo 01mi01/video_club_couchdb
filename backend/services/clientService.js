@@ -72,6 +72,9 @@ function normalize(body, { partial = false } = {}) {
 
 async function create(body) {
   const data = normalize(body, { partial: false });
+  // Apellido materno opcional: si no vino, se guarda explícitamente como
+  // `null` (no ausente) para que TODOS los clientes tengan la misma forma.
+  if (data.maternal_surname === undefined) data.maternal_surname = null;
   data.registered_at = body.registered_at || new Date().toISOString();
   data.blocked = { is_blocked: false, date: null, reason: null };
   return clientRepo.create(data);

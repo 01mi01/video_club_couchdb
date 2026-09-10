@@ -112,11 +112,42 @@ function quote(days, moviesCount, pricingCfg, discountsCfg) {
 /**
  * Días transcurridos entre dos fechas ISO, redondeando hacia arriba
  * (cualquier fracción de día cuenta como día completo). Mínimo 1.
+ *
+ * Se usa para el CÁLCULO DE ATRASO en la devolución real: si el cliente
+ * tuvo la copia 12 días y 3 horas, cuenta como 13.
  */
 function daysBetween(fromISO, toISO) {
   const ms = new Date(toISO).getTime() - new Date(fromISO).getTime();
   const d = Math.ceil(ms / (24 * 60 * 60 * 1000));
   return Math.max(1, d);
+}
+
+/**
+ * Número de día de calendario (en UTC) de una fecha ISO, como entero.
+ * Sirve para comparar y restar fechas ignorando la hora del día.
+ * (Limitación honesta: se usa UTC; para una app de un solo propietario en
+ * una zona horaria fija es suficiente.)
+ */
+function calendarDayIndex(iso) {
+  const d = new Date(iso);
+  return Math.floor(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()) / (24 * 60 * 60 * 1000));
+}
+
+/**
+ * Días de préstamo entre la fecha del préstamo y una FECHA DE DEVOLUCIÓN
+ * PACTADA, contados como días de CALENDARIO (se ignora la hora del día).
+ *
+ * Motivo: al registrar el préstamo el propietario elige una fecha ("el
+ * cliente devuelve el jueves"). Si se contara por milisegundos con `ceil`,
+ * la misma fecha podría facturarse como 3 o 4 días según la hora exacta en
+ * que se registra el préstamo — poco predecible en la pantalla "por
+ * fecha". Contando por calendario: lunes -> jueves = 3 días, siempre.
+ *
+ * MÍNIMO 1: devolver EL MISMO DÍA del préstamo es válido y se factura como
+ * 1 día (el mínimo de la tabla de precios).
+ */
+function calendarDaysBetween(fromISO, toISO) {
+  return Math.max(1, calendarDayIndex(toISO) - calendarDayIndex(fromISO));
 }
 
 module.exports = {
@@ -127,5 +158,7 @@ module.exports = {
   discountPercentFor,
   quote,
   daysBetween,
+  calendarDayIndex,
+  calendarDaysBetween,
   round2,
 };

@@ -62,10 +62,16 @@ function resolveTerm(body, loanDateISO) {
   if (body.due_date !== undefined) {
     const due = new Date(body.due_date);
     if (Number.isNaN(due.getTime())) throw badRequest('`due_date` inválida.');
-    if (due.getTime() <= loanDate.getTime()) {
-      throw badRequest('`due_date` debe ser posterior a la fecha del préstamo.');
+    // Se rechaza solo si la fecha de devolución cae en un día ANTERIOR al
+    // del préstamo. El MISMO día es válido y se factura como 1 día (mínimo
+    // de la tabla). Se compara por día de calendario, no por hora.
+    if (pricing.calendarDayIndex(due.toISOString()) < pricing.calendarDayIndex(loanDateISO)) {
+      throw badRequest('`due_date` no puede ser anterior al día del préstamo.');
     }
-    const days = pricing.daysBetween(loanDateISO, due.toISOString());
+    // Días de CALENDARIO (no por milisegundos): elegir "jueves" cuando se
+    // presta el "lunes" son 3 días; el mismo día son 1. Así la pantalla
+    // "por fecha" es predecible. Ver `pricing.calendarDaysBetween`.
+    const days = pricing.calendarDaysBetween(loanDateISO, due.toISOString());
     return { days, due_date: due.toISOString() };
   }
   throw badRequest('Indica `days` o `due_date`.');
@@ -342,8 +348,10 @@ async function returnLoan(loanId, body) {
         // devolución). En ambos casos el préstamo ya no está abierto.
         throw conflict(`Este préstamo ya está cerrado (status "${loan.status}").`);
       }
-      if (new Date(returnDate).getTime() < new Date(loan.loan_date).getTime()) {
-        throw badRequest('La fecha de devolución no puede ser anterior al préstamo.');
+      // Se rechaza solo si la devolución cae en un día ANTERIOR al del
+      // préstamo. Devolver el MISMO día es válido y se factura como 1 día.
+      if (pricing.calendarDayIndex(returnDate) < pricing.calendarDayIndex(loan.loan_date)) {
+        throw badRequest('La fecha de devolución no puede ser anterior al día del préstamo.');
       }
 
       const cfg = await configService.effectiveConfig();

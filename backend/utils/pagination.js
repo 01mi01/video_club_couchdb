@@ -26,7 +26,10 @@
  */
 
 const DEFAULT_LIMIT = 50;
-const MAX_LIMIT = 200;
+// Tope alto: es una app de un solo propietario; el catálogo y el padrón de
+// clientes caben de sobra en una sola respuesta. El frontend pide
+// explícitamente un límite amplio para no truncar las tablas en silencio.
+const MAX_LIMIT = 1000;
 
 function isBlank(raw) {
   return raw === undefined || raw === null || String(raw).trim() === '';

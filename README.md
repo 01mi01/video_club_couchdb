@@ -58,3 +58,35 @@ npm start
 ```
 El servidor corre en `http://localhost:3001`.
 
+## Iniciar el frontend
+
+```bash
+cd frontend
+npm install
+```
+
+Crear un archivo `.env` dentro de `frontend/` (usar `.env.example` como referencia):
+
+```
+VITE_API_URL=http://localhost:3001/api
+```
+
+Correr el frontend:
+```bash
+npm run dev
+```
+
+Abrir `http://localhost:5173`
+
+**Requisito**: el backend debe estar corriendo (`npm start` dentro de
+`backend/`) antes de usar el frontend.
+
+Iniciar sesión con las credenciales `ADMIN_USERNAME` / `ADMIN_PASSWORD`
+configuradas en `backend/.env` al ejecutar `create-admin.js`.
+
+## Cómo iniciar todo el proyecto (orden completo)
+
+1. Asegurarse de que CouchDB esté corriendo (servicio de Windows).
+2. `cd backend && npm install && npm start`
+3. En otra terminal: `cd frontend && npm install && npm run dev`
+4. Abrir el frontend en el navegador e iniciar sesión.

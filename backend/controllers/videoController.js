@@ -1,5 +1,6 @@
 /** Controlador de VIDEOS. */
 const videoService = require('../services/videoService');
+const { parsePagination } = require('../utils/pagination');
 
 exports.create = async (req, res) => {
   const video = await videoService.create(req.body || {});
@@ -7,9 +8,9 @@ exports.create = async (req, res) => {
 };
 
 exports.list = async (req, res) => {
-  const limit = req.query.limit ? Number(req.query.limit) : undefined;
-  const skip = req.query.skip ? Number(req.query.skip) : undefined;
-  res.json(await videoService.list({ limit, skip }));
+  // `limit`/`skip` opcionales: si faltan o vienen vacíos, `parsePagination`
+  // aplica los valores por defecto (limit 50, skip 0). Nunca es un error.
+  res.json(await videoService.list(parsePagination(req.query)));
 };
 
 // IMPORTANTE: esta ruta se monta ANTES de "/:id" para que "search" no se

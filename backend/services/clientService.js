@@ -77,8 +77,8 @@ async function create(body) {
   return clientRepo.create(data);
 }
 
-async function list() {
-  return clientRepo.list();
+async function list(opts) {
+  return clientRepo.list(opts);
 }
 
 async function getById(id) {

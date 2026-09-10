@@ -27,8 +27,8 @@ async function create(body) {
   return genreRepo.create(data);
 }
 
-async function list() {
-  return genreRepo.list();
+async function list(opts) {
+  return genreRepo.list(opts);
 }
 
 async function getById(id) {

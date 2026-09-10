@@ -289,6 +289,10 @@ async function search(query) {
   }
 
   const selector = and.length === 1 ? and[0] : { $and: and };
+  // `?limit=` opcional: ausente / vacío / no numérico => 100 por defecto.
+  // `Number('') || 100` y `Number('abc') || 100` resuelven a 100, así que
+  // aquí nunca se propaga `undefined`/`NaN` a la consulta Mango. Tope 500
+  // (búsqueda puede querer más resultados que un listado normal).
   const limit = Math.min(Number(query.limit) || 100, 500);
 
   return videoRepo.find(selector, { use_index: useIndex, limit });

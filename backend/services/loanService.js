@@ -436,8 +436,8 @@ async function returnLoan(loanId, body) {
 /* ---------------------------------------------------------------------------
  * Lecturas
  * ------------------------------------------------------------------------- */
-async function listLoans() {
-  return loanRepo.listLoans();
+async function listLoans(opts) {
+  return loanRepo.listLoans(opts);
 }
 async function getLoan(id) {
   return loanRepo.getLoan(id);
@@ -449,8 +449,8 @@ async function getInvoiceByLoan(loanId) {
 async function getInvoice(id) {
   return loanRepo.getInvoice(id);
 }
-async function listInvoices() {
-  return loanRepo.listInvoices();
+async function listInvoices(opts) {
+  return loanRepo.listInvoices(opts);
 }
 
 module.exports = {

@@ -38,10 +38,23 @@ COUCHDB_PASSWORD=tu_password
 COUCHDB_DB=video_club_db
 PORT=3001
 JWT_SECRET=tu_secreto_random
+ADMIN_USERNAME=tu_usuario_elegido
+ADMIN_PASSWORD=tu_password_elegido
 ```
+
+## Configuración inicial 
+
+```bash
+node scripts/create-admin.js
+node scripts/create-indexes.js
+```
+
+Esto crea el usuario propietario y los índices de búsqueda en CouchDB.
+Solo se ejecuta una vez.
 
 ## Iniciar el servidor
 ```bash
 npm start
 ```
 El servidor corre en `http://localhost:3001`.
+

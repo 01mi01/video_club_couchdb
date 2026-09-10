@@ -115,13 +115,22 @@ async function remove(id, { label = 'Documento' } = {}) {
  * cubre todo el rango del prefijo.
  */
 async function listByType(type, { limit, skip } = {}) {
-  const res = await db.list({
+  // CONSTRUCCIÓN CONDICIONAL DE LA QUERY.
+  // `nano` v11 serializa el querystring con `new URLSearchParams(qs)`, que
+  // convierte CUALQUIER valor con `String(valor)`. Si aquí se colara
+  // `limit: undefined`, CouchDB recibiría `?limit=undefined` y devolvería
+  // `400 - Invalid value for integer: undefined`. Por eso `limit`/`skip`
+  // se agregan SOLO cuando son números finitos; ausentes = sin límite,
+  // que es justo el comportamiento por defecto de `_all_docs`.
+  const query = {
     include_docs: true,
     startkey: `${type}:`,
     endkey: `${type}:￰`,
-    limit,
-    skip,
-  });
+  };
+  if (Number.isFinite(limit)) query.limit = limit;
+  if (Number.isFinite(skip) && skip > 0) query.skip = skip;
+
+  const res = await db.list(query);
   return res.rows.map((r) => r.doc);
 }
 
@@ -132,7 +141,11 @@ async function listByType(type, { limit, skip } = {}) {
  * consola: sirve para demostrar en el video la diferencia indexado vs no.
  */
 async function find(selector, options = {}) {
-  const query = { selector, limit: options.limit || 100, ...options };
+  // Se desestructura `limit` aparte para que un `limit: undefined` en
+  // `options` NO pise el valor por defecto vía el spread (mismo problema
+  // de `undefined` serializado que en `listByType`).
+  const { limit, ...rest } = options;
+  const query = { selector, limit: Number.isFinite(limit) ? limit : 100, ...rest };
   const res = await db.find(query);
   if (res.warning) {
     console.warn('[CouchDB _find] Consulta SIN índice:', res.warning);

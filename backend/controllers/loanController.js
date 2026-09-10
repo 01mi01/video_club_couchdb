@@ -1,5 +1,6 @@
 /** Controlador de PRÉSTAMOS y FACTURAS. */
 const loanService = require('../services/loanService');
+const { parsePagination } = require('../utils/pagination');
 
 // Cotización sin persistir: calcular importe según fecha de devolución.
 exports.quote = async (req, res) => {
@@ -13,7 +14,8 @@ exports.create = async (req, res) => {
 };
 
 exports.list = async (req, res) => {
-  res.json(await loanService.listLoans());
+  // `?limit=` / `?skip=` opcionales; ausentes => defaults (nunca error).
+  res.json(await loanService.listLoans(parsePagination(req.query)));
 };
 
 exports.getById = async (req, res) => {
@@ -31,7 +33,8 @@ exports.invoiceByLoan = async (req, res) => {
 };
 
 exports.listInvoices = async (req, res) => {
-  res.json(await loanService.listInvoices());
+  // `?limit=` / `?skip=` opcionales; ausentes => defaults (nunca error).
+  res.json(await loanService.listInvoices(parsePagination(req.query)));
 };
 
 exports.getInvoice = async (req, res) => {

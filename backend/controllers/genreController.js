@@ -1,5 +1,6 @@
 /** Controlador de GÉNEROS. */
 const genreService = require('../services/genreService');
+const { parsePagination } = require('../utils/pagination');
 
 exports.create = async (req, res) => {
   const genre = await genreService.create(req.body || {});
@@ -7,7 +8,8 @@ exports.create = async (req, res) => {
 };
 
 exports.list = async (req, res) => {
-  res.json(await genreService.list());
+  // `?limit=` / `?skip=` opcionales; ausentes => defaults (nunca error).
+  res.json(await genreService.list(parsePagination(req.query)));
 };
 
 exports.getById = async (req, res) => {

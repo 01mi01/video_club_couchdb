@@ -25,9 +25,25 @@
  * ============================================================================
  */
 
-// nano lanza un error con statusCode 409 y `error === 'conflict'`.
+/**
+ * ¿Es un conflicto MVCC REAL de CouchDB (merece reintento)?
+ *
+ * OJO: no basta con mirar el código 409. Los errores de DOMINIO de la app
+ * (`AppError`) también usan 409 para condiciones como "cliente bloqueado"
+ * o "copia no disponible" (semánticamente son "conflictos" de negocio).
+ * Esas condiciones son DETERMINISTAS: reintentarlas es inútil y además
+ * enmascara el mensaje real con un genérico de "conflicto de versión".
+ *
+ * Por eso: un `AppError` NUNCA se reintenta. Solo se reintenta el
+ * conflicto de `_rev` que lanza nano/CouchDB, identificado por
+ * `error === 'conflict'` (marca de nano) o por un 409 de un error que
+ * NO es de dominio (p.ej. el 409 sintético que arma `loanService` cuando
+ * un `_bulk_docs` falla por `_rev` viejo).
+ */
 function isConflict(err) {
-  return err && (err.statusCode === 409 || err.status === 409 || err.error === 'conflict');
+  if (!err) return false;
+  if (err.name === 'AppError') return false;
+  return err.error === 'conflict' || err.statusCode === 409 || err.status === 409;
 }
 
 /**

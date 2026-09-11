@@ -3,10 +3,12 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAsync } from '../hooks/useAsync.js';
 import * as API from '../api/endpoints.js';
 import { PageHeader, Card, Button, Spinner, Alert, Badge, EmptyState, TextInput, IconButton, IconEye, IconPencil } from '../components/ui.jsx';
-import { fullName, dateShort } from '../lib/format.js';
+import { useRefData } from '../context/RefDataContext.jsx';
+import { fullName, fullAddress, dateShort } from '../lib/format.js';
 
 export default function ClientsPage() {
   const navigate = useNavigate();
+  const { zoneName } = useRefData();
   const { data: clients, loading, error } = useAsync(() => API.listClients(), []);
   const [q, setQ] = useState('');
 
@@ -76,7 +78,7 @@ export default function ClientsPage() {
                         <td className="whitespace-nowrap">{c.phone_mobile}</td>
                         <td className="text-ink-soft">{c.email || '—'}</td>
                         <td className="max-w-xs truncate text-xs text-ink-soft">
-                          {c.address?.text || '—'}
+                          {fullAddress(c, zoneName(c.address?.zone_id))}
                         </td>
                         <td className="whitespace-nowrap text-xs">{dateShort(c.registered_at)}</td>
                         <td>

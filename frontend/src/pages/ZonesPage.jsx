@@ -195,7 +195,7 @@ export default function ZonesPage() {
             <TextInput
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
-              placeholder="ej. Equipetrol — Santa Cruz de la Sierra"
+              placeholder="ej. Equipetrol, Santa Cruz de la Sierra"
               required
               autoFocus
             />

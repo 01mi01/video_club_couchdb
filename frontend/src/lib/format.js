@@ -44,6 +44,16 @@ export function fullName(c) {
   return [c.first_name, c.paternal_surname, c.maternal_surname].filter(Boolean).join(' ');
 }
 
+// Dirección completa para MOSTRAR: `address.text` es solo la calle/número
+// (el empleado ya no teclea la zona ahí — la elige del dropdown), así que
+// acá se le agrega el nombre de la zona referenciada. `zoneName` viene de
+// `useRefData().zoneName(client.address?.zone_id)`.
+export function fullAddress(client, zoneName) {
+  const text = client?.address?.text || '';
+  if (!text) return '—';
+  return zoneName ? `${text}, ${zoneName}` : text;
+}
+
 export function daysOverdue(dueIso) {
   if (!dueIso) return 0;
   const diff = Date.now() - new Date(dueIso).getTime();

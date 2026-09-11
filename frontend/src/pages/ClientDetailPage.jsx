@@ -17,7 +17,7 @@ import {
   IconEye,
 } from '../components/ui.jsx';
 import ConfirmDialog from '../components/ConfirmDialog.jsx';
-import { fullName, dateShort, money, LOAN_STATUS_LABEL } from '../lib/format.js';
+import { fullName, fullAddress, dateShort, money, LOAN_STATUS_LABEL } from '../lib/format.js';
 
 export default function ClientDetailPage() {
   const { id } = useParams();
@@ -121,16 +121,15 @@ export default function ClientDetailPage() {
             <Row k="Correo" v={c.email || '—'} />
             <Row k="Fecha de nacimiento" v={dateShort(c.birth_date)} />
             <Row k="Fecha de registro" v={dateShort(c.registered_at)} />
-            <Row k="Dirección" v={c.address?.text || '—'} wide />
+            <Row k="Dirección" v={fullAddress(c, zone?.name)} wide />
             <Row
-              k="Zona / geolocalización"
+              k="Geolocalización"
               wide
               v={
                 zone && geo ? (
                   <>
-                    <span className="font-medium">{zone.name}</span>{' '}
                     <span className="text-ink-soft">
-                      ({geo.lat}, {geo.lng})
+                      {geo.lat}, {geo.lng}
                     </span>{' '}
                     <a
                       className="underline hover:text-teal"

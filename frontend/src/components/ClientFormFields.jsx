@@ -61,6 +61,13 @@ export default function ClientFormFields({ form, set, isEdit, zones, compact = f
   const Wrap = compact ? 'div' : Card;
   const wrapProps = compact ? { className: 'space-y-4 rounded-lg border border-ink-line p-4' } : {};
 
+  // Vista previa de cómo queda la dirección completa (calle/número + zona
+  // elegida), para que quede claro que la zona se agrega sola.
+  const selectedZoneName = zones.find((z) => z._id === form.zone_id)?.name;
+  const addressPreview = selectedZoneName
+    ? `${form.addr_text.trim()}, ${selectedZoneName}`
+    : form.addr_text.trim();
+
   return (
     <div className="space-y-4">
       <Wrap {...wrapProps}>
@@ -129,38 +136,47 @@ export default function ClientFormFields({ form, set, isEdit, zones, compact = f
 
       <Wrap {...wrapProps}>
         {!compact && <h2 className="mb-4 text-xl font-semibold">Dirección y geolocalización</h2>}
-        <Field label="Dirección" required>
-          <TextInput
-            value={form.addr_text}
-            onChange={(e) => set({ addr_text: e.target.value })}
-            placeholder="Calle, número, zona, ciudad"
-            required
-          />
+        <Field
+          label="Zona"
+          hint="Geolocalización preconfigurada — reemplaza teclear lat/lng a mano. Administrar en “Zonas”."
+        >
+          <Select value={form.zone_id} onChange={(e) => set({ zone_id: e.target.value })}>
+            <option value="">Sin zona</option>
+            {[...zones]
+              // Misma regla que género: una zona inactiva no aparece para
+              // asignación nueva, salvo que este cliente ya la tuviera.
+              .filter((z) => z.active !== false || form.zone_id === z._id)
+              .sort((a, b) => a.name.localeCompare(b.name))
+              .map((z) => (
+                <option key={z._id} value={z._id}>
+                  {z.name}
+                  {z.active === false ? ' (inactiva)' : ''}
+                </option>
+              ))}
+          </Select>
         </Field>
+        {zones.length === 0 && (
+          <p className="mt-1.5 text-xs text-ink-soft">
+            Todavía no hay zonas creadas. Crear la primera en{' '}
+            <span className="font-semibold">Zonas</span> (menú lateral).
+          </p>
+        )}
         <div className="mt-4">
           <Field
-            label="Zona"
-            hint="Geolocalización preconfigurada — reemplaza teclear lat/lng a mano. Administrar en “Zonas”."
+            label="Dirección (calle y número)"
+            required
+            hint="Solo la calle/número — la zona elegida arriba ya se agrega sola, no hace falta repetirla."
           >
-            <Select value={form.zone_id} onChange={(e) => set({ zone_id: e.target.value })}>
-              <option value="">— sin zona —</option>
-              {[...zones]
-                // Misma regla que género: una zona inactiva no aparece para
-                // asignación nueva, salvo que este cliente ya la tuviera.
-                .filter((z) => z.active !== false || form.zone_id === z._id)
-                .sort((a, b) => a.name.localeCompare(b.name))
-                .map((z) => (
-                  <option key={z._id} value={z._id}>
-                    {z.name}
-                    {z.active === false ? ' (inactiva)' : ''}
-                  </option>
-                ))}
-            </Select>
+            <TextInput
+              value={form.addr_text}
+              onChange={(e) => set({ addr_text: e.target.value })}
+              placeholder="Calle 8 de Calacoto 450"
+              required
+            />
           </Field>
-          {zones.length === 0 && (
+          {form.addr_text.trim() && (
             <p className="mt-1.5 text-xs text-ink-soft">
-              Todavía no hay zonas creadas. Crear la primera en{' '}
-              <span className="font-semibold">Zonas</span> (menú lateral).
+              Se guardará como: <span className="font-medium text-ink">{addressPreview}</span>
             </p>
           )}
         </div>

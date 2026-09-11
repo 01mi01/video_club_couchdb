@@ -11,7 +11,7 @@ export default function InvoiceView({ invoice, clientName, showPrint = true }) {
       <div className="p-6">
         <div className="flex items-start justify-between">
           <div>
-            <p className="eyebrow">Video Club — Comprobante</p>
+            <p className="eyebrow">Video Club · Comprobante</p>
             <h2 className="text-2xl font-semibold text-ink">
               Factura N.º {invoice.number}
             </h2>

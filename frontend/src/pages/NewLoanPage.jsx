@@ -198,7 +198,7 @@ export default function NewLoanPage() {
             </div>
             <Field label="Cliente" required>
               <Select value={clientId} onChange={(e) => setClientId(e.target.value)}>
-                <option value="">— seleccionar —</option>
+                <option value="">Seleccionar cliente</option>
                 {[...clients]
                   .sort((a, b) => fullName(a).localeCompare(fullName(b)))
                   .map((c) => (

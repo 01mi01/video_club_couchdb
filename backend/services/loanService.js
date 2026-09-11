@@ -290,7 +290,7 @@ async function createLoan(body) {
 
 function buildInvoiceLines(loanItems, breakdown, days) {
   const lines = loanItems.map((it) => ({
-    description: `Préstamo ${days} día(s) — "${it.title}" (copia ${it.copy_id})`,
+    description: `Préstamo ${days} día(s): "${it.title}" (copia ${it.copy_id})`,
     amount: breakdown.price_per_movie,
   }));
   if (breakdown.discount_amount > 0) {

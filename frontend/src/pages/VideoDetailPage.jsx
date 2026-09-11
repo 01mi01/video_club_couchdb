@@ -183,7 +183,7 @@ export default function VideoDetailPage() {
                   <td>{dateShort(c.acquisition_date)}</td>
                   <td className="text-xs text-ink-soft">
                     {c.retirement
-                      ? `${dateShort(c.retirement.date)} — ${c.retirement.reason}`
+                      ? `${dateShort(c.retirement.date)} · ${c.retirement.reason}`
                       : '—'}
                   </td>
                   <td className="text-right">

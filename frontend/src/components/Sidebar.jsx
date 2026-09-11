@@ -1,5 +1,6 @@
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
+import { useNavGuard } from '../context/NavGuardContext.jsx';
 import { RainbowStripe } from './ui.jsx';
 
 // Navegacion: sidebar FIJO siempre visible (panel de administracion), no
@@ -17,32 +18,37 @@ const NAV = [
 
 export default function Sidebar({ onNavigate }) {
   const { username, signOut } = useAuth();
+  const { tryNavigate } = useNavGuard();
 
   return (
-    <aside className="flex h-full w-64 shrink-0 flex-col border-r-2 border-ink bg-paper">
-      <div className="border-b-2 border-ink px-5 py-5">
-        <p className="eyebrow">Base de Datos Avanzadas</p>
-        <h1 className="mt-1 font-display text-2xl font-semibold leading-none text-ink">
-          Video Club
-        </h1>
-        <p className="mt-1 text-xs text-ink-soft">Administración — CouchDB</p>
+    <aside className="flex h-full w-56 shrink-0 flex-col border-r border-ink-line bg-white">
+      <div className="px-4 py-5">
+        <h1 className="text-lg font-bold leading-none text-ink">Video Club</h1>
       </div>
       <RainbowStripe />
 
-      <nav className="flex-1 overflow-y-auto p-3">
-        <ul className="space-y-1">
+      <nav className="flex-1 overflow-y-auto p-2.5">
+        <ul className="space-y-0.5">
           {NAV.map((item) => (
             <li key={item.to}>
               <NavLink
                 to={item.to}
                 end={item.end}
-                onClick={onNavigate}
+                onClick={(e) => {
+                  // Si una pantalla con cambios sin guardar (ej.
+                  // Configuración) intercepta la navegación, ella misma
+                  // mostrará su aviso y decidirá si navega — aquí solo se
+                  // cancela el link nativo.
+                  if (!tryNavigate(item.to)) {
+                    e.preventDefault();
+                    return;
+                  }
+                  onNavigate?.();
+                }}
                 className={({ isActive }) =>
                   [
-                    'block border-2 px-3 py-2 text-sm font-semibold uppercase tracking-label transition-colors',
-                    isActive
-                      ? 'border-ink bg-ink text-paper'
-                      : 'border-transparent text-ink hover:border-ink hover:bg-cream',
+                    'block rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                    isActive ? 'bg-ink text-white' : 'text-ink-soft hover:bg-ink/5 hover:text-ink',
                   ].join(' ')
                 }
               >
@@ -53,12 +59,11 @@ export default function Sidebar({ onNavigate }) {
         </ul>
       </nav>
 
-      <div className="border-t-2 border-ink p-4">
-        <p className="text-xs text-ink-soft">Propietario</p>
-        <p className="truncate text-sm font-semibold text-ink">{username || '—'}</p>
+      <div className="border-t border-ink-line p-3">
+        <p className="truncate px-1 text-sm font-semibold text-ink">{username || '—'}</p>
         <button
           onClick={signOut}
-          className="mt-2 w-full border-2 border-ink px-3 py-1.5 text-xs font-semibold uppercase tracking-label text-ink hover:bg-rust hover:text-white"
+          className="mt-2 w-full rounded-lg px-3 py-2 text-left text-sm font-medium text-ink-soft transition-colors hover:bg-rust/10 hover:text-rust"
         >
           Cerrar sesión
         </button>

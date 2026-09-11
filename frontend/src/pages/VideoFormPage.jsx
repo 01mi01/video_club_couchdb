@@ -244,7 +244,7 @@ export default function VideoFormPage() {
             <span className="label">
               Géneros <span className="text-rust">*</span>
             </span>
-            <div className="grid gap-2 border-2 border-ink p-3 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="grid gap-2 rounded-lg border border-ink-line p-3 sm:grid-cols-2 lg:grid-cols-3">
               {[...genres]
                 // Un género inactivo ya no se puede asignar a películas
                 // nuevas ni agregarlo en una edición — se excluye del
@@ -293,7 +293,7 @@ export default function VideoFormPage() {
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <span className="label">Nominaciones</span>
-              <div className="mt-1 max-h-64 overflow-y-auto border-2 border-ink p-3">
+              <div className="mt-1 max-h-64 overflow-y-auto rounded-lg border border-ink-line p-3">
                 {selectableCategories(form.oscar_nominations).length === 0 ? (
                   <p className="text-xs text-ink-soft">
                     Sin categorías. Créalas en "Categorías Oscar".
@@ -317,7 +317,7 @@ export default function VideoFormPage() {
             </div>
             <div>
               <span className="label">Premios ganados</span>
-              <div className="mt-1 max-h-64 overflow-y-auto border-2 border-ink p-3">
+              <div className="mt-1 max-h-64 overflow-y-auto rounded-lg border border-ink-line p-3">
                 {selectableCategories(form.oscar_wins).length === 0 ? (
                   <p className="text-xs text-ink-soft">
                     Sin categorías. Créalas en "Categorías Oscar".

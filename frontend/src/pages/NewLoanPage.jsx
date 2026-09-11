@@ -201,7 +201,7 @@ export default function NewLoanPage() {
             ) : searchRows.length === 0 ? (
               <p className="mt-3 text-sm text-ink-soft">Sin resultados.</p>
             ) : (
-              <ul className="mt-3 divide-y divide-ink-line border-2 border-ink">
+              <ul className="mt-3 divide-y divide-ink-line rounded-lg border border-ink-line">
                 {searchRows.map((v) => {
                   const avail = (v.copies || []).filter((c) => c.status === 'available').length;
                   const inCart = cart.find((i) => i.video_id === v._id)?.qty || 0;
@@ -239,16 +239,16 @@ export default function NewLoanPage() {
             <div className="flex gap-2">
               <button
                 onClick={() => setTermMode('days')}
-                className={`border-2 px-3 py-1.5 text-xs font-semibold uppercase tracking-label ${
-                  termMode === 'days' ? 'border-ink bg-ink text-paper' : 'border-ink hover:bg-cream'
+                className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
+                  termMode === 'days' ? 'bg-ink text-white' : 'bg-ink/5 text-ink-soft hover:bg-ink/10'
                 }`}
               >
                 Por días
               </button>
               <button
                 onClick={() => setTermMode('due')}
-                className={`border-2 px-3 py-1.5 text-xs font-semibold uppercase tracking-label ${
-                  termMode === 'due' ? 'border-ink bg-ink text-paper' : 'border-ink hover:bg-cream'
+                className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
+                  termMode === 'due' ? 'bg-ink text-white' : 'bg-ink/5 text-ink-soft hover:bg-ink/10'
                 }`}
               >
                 Por fecha
@@ -296,10 +296,10 @@ export default function NewLoanPage() {
                     <div className="flex items-start justify-between gap-2">
                       <span className="font-semibold">{i.title}</span>
                       <button
-                        className="text-xs text-rust underline"
+                        className="rounded-md px-2 py-0.5 text-xs font-medium text-rust hover:bg-rust/10"
                         onClick={() => removeItem(i.video_id)}
                       >
-                        quitar
+                        Quitar
                       </button>
                     </div>
                     <div className="mt-1 flex items-center gap-2">
@@ -310,7 +310,7 @@ export default function NewLoanPage() {
                         max={i.available}
                         value={i.qty}
                         onChange={(e) => setQty(i.video_id, Number(e.target.value))}
-                        className="w-16 border-2 border-ink px-2 py-1 text-sm"
+                        className="w-16 rounded-lg border border-ink-line px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-teal/60"
                       />
                       <span className="text-xs text-ink-soft">de {i.available} disp.</span>
                     </div>
@@ -319,7 +319,7 @@ export default function NewLoanPage() {
               </ul>
             )}
 
-            <div className="mt-4 border-t-2 border-ink pt-3">
+            <div className="mt-4 border-t border-ink-line pt-3">
               {quoting && <p className="text-sm text-ink-soft">Calculando…</p>}
               {quoteErr && <Alert>{quoteErr}</Alert>}
               {quote && !quoteErr && (
@@ -332,7 +332,7 @@ export default function NewLoanPage() {
                     k={`Descuento (${quote.pricing.discount_percent}%)`}
                     v={`− ${money(quote.pricing.discount_amount)}`}
                   />
-                  <div className="flex justify-between border-t-2 border-ink pt-2 font-display text-xl font-semibold">
+                  <div className="flex justify-between border-t border-ink-line pt-2 text-xl font-semibold">
                     <span>Total</span>
                     <span>{money(quote.pricing.total_amount)}</span>
                   </div>

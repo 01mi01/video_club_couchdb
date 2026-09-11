@@ -1,9 +1,29 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import * as API from '../api/endpoints.js';
 import { PageHeader, Card, Button, Spinner, Alert, Badge, TextInput } from '../components/ui.jsx';
+import ConfirmDialog from '../components/ConfirmDialog.jsx';
+import { useNavGuard } from '../context/NavGuardContext.jsx';
 import { money } from '../lib/format.js';
 
+// ============================================================================
+// CONFIGURACIÓN — Gestión de Préstamos 2 y 3 del enunciado:
+//   2. "Definir y modificar costos por día de préstamo (configurable)."
+//   3. "Definir y modificar descuentos por cantidad de películas (configurable)."
+// Ambos puntos están cubiertos por esta pantalla (tabla de precios por día +
+// tramos de descuento por cantidad). El respaldo de la regla "no deben
+// permitirse préstamos mayores a los días configurados" vive en el backend
+// (`pricing.assertDaysAllowed`, aplicado en `loanService.createLoan`); aquí
+// solo se EXPLICA para que quede claro por qué agregar/quitar un día cambia
+// el máximo permitido.
+// ============================================================================
+
+const snapshot = (prices, tiers) => JSON.stringify({ prices, tiers });
+
 export default function ConfigPage() {
+  const navigate = useNavigate();
+  const { register } = useNavGuard();
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -18,6 +38,12 @@ export default function ConfigPage() {
   const [discMsg, setDiscMsg] = useState(null);
   const [savingD, setSavingD] = useState(false);
 
+  // Punto de referencia contra el que se compara para saber si hay
+  // cambios sin guardar (se actualiza al cargar y después de cada guardado
+  // exitoso — nunca "a mitad" de una edición).
+  const baseline = useRef('');
+  const [pendingNav, setPendingNav] = useState(null);
+
   async function load() {
     setLoading(true);
     setError(null);
@@ -27,17 +53,18 @@ export default function ConfigPage() {
       const days = Object.keys(map)
         .map(Number)
         .sort((a, b) => a - b);
-      setPrices(days.map((day) => String(map[day])));
+      const loadedPrices = days.map((day) => String(map[day]));
+      const loadedTiers = (d.tiers || []).map((t) => ({
+        min_qty: String(t.min_qty),
+        max_qty: t.max_qty == null ? '' : String(t.max_qty),
+        no_cap: t.max_qty == null,
+        percent: String(t.percent),
+      }));
+      setPrices(loadedPrices);
       setPricingMeta({ persisted: p.persisted, max_days: p.max_days, updated_at: p.updated_at });
-      setTiers(
-        (d.tiers || []).map((t) => ({
-          min_qty: String(t.min_qty),
-          max_qty: t.max_qty == null ? '' : String(t.max_qty),
-          no_cap: t.max_qty == null,
-          percent: String(t.percent),
-        }))
-      );
+      setTiers(loadedTiers);
       setDiscMeta({ persisted: d.persisted, updated_at: d.updated_at });
+      baseline.current = snapshot(loadedPrices, loadedTiers);
     } catch (e) {
       setError(e.message);
     } finally {
@@ -48,7 +75,44 @@ export default function ConfigPage() {
     load();
   }, []);
 
-  // --- Pricing ---
+  const dirty = !loading && snapshot(prices, tiers) !== baseline.current;
+
+  // --- Aviso de salida con cambios sin guardar (punto 4, "SIEMPRE") -----
+  // (a) cierre de pestaña / recarga: el navegador impone su propio texto
+  //     genérico (ninguna app puede personalizarlo, es una protección de
+  //     seguridad del navegador) — lo importante es que SIEMPRE aparece
+  //     si hay cambios sin guardar.
+  useEffect(() => {
+    function handler(e) {
+      if (!dirty) return;
+      e.preventDefault();
+      e.returnValue = '';
+    }
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [dirty]);
+
+  // (b) navegación DENTRO de la app (sidebar): intercepta y muestra un
+  // aviso propio, en español, con la opción de salir sin guardar o
+  // cancelar. (Limitación: no cubre el botón "atrás" del navegador — ver
+  // NavGuardContext.jsx.)
+  useEffect(() => {
+    return register({
+      tryNavigate: (to) => {
+        if (!dirty) return true;
+        setPendingNav(to);
+        return false;
+      },
+    });
+  }, [register, dirty]);
+
+  function confirmLeave() {
+    const to = pendingNav;
+    setPendingNav(null);
+    navigate(to);
+  }
+
+  // --- Precios por día ----------------------------------------------------
   function setPrice(i, v) {
     setPrices((p) => p.map((x, idx) => (idx === i ? v : x)));
   }
@@ -68,7 +132,11 @@ export default function ConfigPage() {
       });
       const res = await API.setPricing({ price_by_days });
       setPricingMeta({ persisted: true, max_days: res.max_days, updated_at: res.updated_at });
-      setPricingMsg({ kind: 'success', msg: `Guardado. Máximo de días de préstamo: ${res.max_days}.` });
+      setPricingMsg({
+        kind: 'success',
+        msg: `Guardado. Ahora el préstamo más largo permitido es de ${res.max_days} día(s).`,
+      });
+      baseline.current = snapshot(prices, tiers);
     } catch (e) {
       setPricingMsg({ kind: 'error', msg: e.message });
     } finally {
@@ -76,7 +144,7 @@ export default function ConfigPage() {
     }
   }
 
-  // --- Discounts ---
+  // --- Descuentos por cantidad ---------------------------------------------
   function setTier(i, patch) {
     setTiers((t) => t.map((x, idx) => (idx === i ? { ...x, ...patch } : x)));
   }
@@ -100,6 +168,7 @@ export default function ConfigPage() {
       const res = await API.setDiscounts(payload);
       setDiscMeta({ persisted: true, updated_at: res.updated_at });
       setDiscMsg({ kind: 'success', msg: 'Descuentos guardados.' });
+      baseline.current = snapshot(prices, tiers);
     } catch (e) {
       setDiscMsg({ kind: 'error', msg: e.message });
     } finally {
@@ -114,22 +183,25 @@ export default function ConfigPage() {
     <div>
       <PageHeader
         title="Configuración"
-        subtitle="Costos por día de préstamo y descuentos por cantidad de películas. Ambos configurables."
+        subtitle="Precio por día de préstamo y descuentos por cantidad de películas. Ambos se pueden modificar en cualquier momento."
+        actions={dirty ? <Badge tone="gold">Cambios sin guardar</Badge> : undefined}
       />
 
       <div className="grid gap-4 lg:grid-cols-2">
         {/* PRECIOS POR DIA */}
         <Card>
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-xl font-semibold">Costo por día de préstamo</h2>
+          <div className="mb-1 flex items-center justify-between">
+            <h2 className="text-lg font-semibold">Precio por día de préstamo</h2>
             <Badge tone={pricingMeta.persisted ? 'teal' : 'soft'}>
               {pricingMeta.persisted ? 'Personalizado' : 'Valores por defecto'}
             </Badge>
           </div>
-          <p className="mb-3 text-sm text-ink-soft">
-            El precio es el total por película para ese plazo. El máximo de días de préstamo es el
-            mayor plazo con precio (actual: <strong>{prices.length}</strong>). No se permiten
-            préstamos más largos.
+          <p className="mb-4 text-sm text-ink-soft">
+            Es el precio TOTAL por película para ese plazo (no "por día" acumulado). El día más
+            largo de la lista es el máximo permitido: hoy es{' '}
+            <strong className="text-ink">{prices.length} día(s)</strong>. Si un cliente quiere
+            llevar una película por más días de los que hay aquí, el sistema rechaza el préstamo
+            automáticamente al registrarlo.
           </p>
 
           {pricingMsg && (
@@ -143,13 +215,14 @@ export default function ConfigPage() {
           <div className="space-y-2">
             {prices.map((v, i) => (
               <div key={i} className="flex items-center gap-3">
-                <span className="w-20 text-sm text-ink-soft">
+                <span className="w-24 shrink-0 text-sm text-ink-soft">
                   {i + 1} día{i + 1 > 1 ? 's' : ''}
                 </span>
                 <TextInput
                   type="number"
                   min="0"
                   step="0.5"
+                  required
                   value={v}
                   onChange={(e) => setPrice(i, e.target.value)}
                   className="max-w-[8rem]"
@@ -159,14 +232,24 @@ export default function ConfigPage() {
             ))}
           </div>
 
-          <div className="mt-3 flex gap-2">
-            <Button size="sm" variant="ghost" onClick={addDay}>
-              + Agregar día
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button size="sm" variant="ghost" type="button" onClick={addDay}>
+              + Agregar un día más
             </Button>
-            <Button size="sm" variant="ghost" onClick={removeDay} disabled={prices.length <= 1}>
-              − Quitar último
+            <Button
+              size="sm"
+              variant="ghost"
+              type="button"
+              onClick={removeDay}
+              disabled={prices.length <= 1}
+            >
+              − Quitar el último día
             </Button>
           </div>
+          <p className="mt-1.5 text-xs text-ink-soft">
+            "Agregar un día más" sube el máximo permitido en uno; "quitar el último día" lo baja
+            (los préstamos ya registrados con ese plazo no se ven afectados).
+          </p>
 
           <Button className="mt-4" onClick={savePricing} disabled={savingP}>
             {savingP ? 'Guardando…' : 'Guardar precios'}
@@ -175,14 +258,15 @@ export default function ConfigPage() {
 
         {/* DESCUENTOS */}
         <Card>
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-xl font-semibold">Descuentos por cantidad</h2>
+          <div className="mb-1 flex items-center justify-between">
+            <h2 className="text-lg font-semibold">Descuento por cantidad de películas</h2>
             <Badge tone={discMeta.persisted ? 'teal' : 'soft'}>
               {discMeta.persisted ? 'Personalizado' : 'Valores por defecto'}
             </Badge>
           </div>
-          <p className="mb-3 text-sm text-ink-soft">
-            Descuento aplicado al total según cuántas películas lleva el cliente en un mismo préstamo.
+          <p className="mb-4 text-sm text-ink-soft">
+            Un tramo dice: "si el cliente lleva ENTRE tantas Y tantas películas en el mismo
+            préstamo, aplica tal % de descuento sobre el total". Puedes tener varios tramos.
           </p>
 
           {discMsg && (
@@ -195,62 +279,77 @@ export default function ConfigPage() {
 
           <div className="space-y-3">
             {tiers.map((t, i) => (
-              <div key={i} className="border-2 border-ink p-3">
+              <div key={i} className="rounded-lg border border-ink-line p-3">
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                   <label className="text-sm">
-                    <span className="label">Desde</span>
+                    <span className="label">Desde (películas)</span>
                     <TextInput
                       type="number"
                       min="1"
+                      required
                       value={t.min_qty}
                       onChange={(e) => setTier(i, { min_qty: e.target.value })}
                     />
                   </label>
                   <label className="text-sm">
-                    <span className="label">Hasta</span>
+                    <span className="label">Hasta (películas)</span>
                     <TextInput
                       type="number"
                       min="1"
+                      required={!t.no_cap}
                       value={t.max_qty}
                       disabled={t.no_cap}
+                      placeholder={t.no_cap ? 'sin límite' : ''}
                       onChange={(e) => setTier(i, { max_qty: e.target.value })}
                     />
                   </label>
                   <label className="text-sm">
-                    <span className="label">Descuento %</span>
-                    <TextInput
-                      type="number"
-                      min="0"
-                      max="100"
-                      value={t.percent}
-                      onChange={(e) => setTier(i, { percent: e.target.value })}
-                    />
+                    <span className="label">Descuento</span>
+                    <div className="flex items-center gap-1.5">
+                      <TextInput
+                        type="number"
+                        min="0"
+                        max="100"
+                        required
+                        value={t.percent}
+                        onChange={(e) => setTier(i, { percent: e.target.value })}
+                      />
+                      <span className="text-ink-soft">%</span>
+                    </div>
                   </label>
-                  <div className="flex items-end justify-between gap-2">
+                  <div className="flex flex-col justify-between gap-2">
                     <label className="flex items-center gap-2 text-xs text-ink">
                       <input
                         type="checkbox"
-                        className="h-4 w-4 accent-[#0d9797]"
+                        className="h-4 w-4 accent-teal"
                         checked={t.no_cap}
-                        onChange={(e) => setTier(i, { no_cap: e.target.checked })}
+                        onChange={(e) => setTier(i, { no_cap: e.target.checked, max_qty: '' })}
                       />
-                      Sin tope
+                      Sin límite superior
                     </label>
-                    <button
-                      className="text-xs text-rust underline"
-                      onClick={() => removeTier(i)}
+                    <Button
+                      size="sm"
+                      variant="ghost"
                       type="button"
+                      className="self-start text-rust hover:bg-rust/10"
+                      onClick={() => removeTier(i)}
                     >
-                      quitar
-                    </button>
+                      Eliminar tramo
+                    </Button>
                   </div>
                 </div>
+                {t.no_cap && (
+                  <p className="mt-2 text-xs text-ink-soft">
+                    Sin límite superior significa "{t.min_qty || '?'} películas o más" — útil para
+                    el último tramo (ej. "más de 5 películas").
+                  </p>
+                )}
               </div>
             ))}
           </div>
 
-          <Button size="sm" variant="ghost" className="mt-3" onClick={addTier}>
-            + Agregar tramo
+          <Button size="sm" variant="ghost" type="button" className="mt-3" onClick={addTier}>
+            + Agregar tramo de descuento
           </Button>
 
           <Button className="mt-4 block" onClick={saveDiscounts} disabled={savingD}>
@@ -260,17 +359,21 @@ export default function ConfigPage() {
       </div>
 
       <Card className="mt-4" accent={false}>
-        <h2 className="text-xl font-semibold">Vista previa de la tabla vigente</h2>
-        <div className="mt-3 grid gap-6 sm:grid-cols-2">
+        <h2 className="text-lg font-semibold">Vista previa de la tabla vigente</h2>
+        <p className="mb-3 text-xs text-ink-soft">
+          Esto es lo que un préstamo nuevo va a cobrar HOY, según lo guardado (no según lo que
+          estés editando arriba sin guardar todavía).
+        </p>
+        <div className="grid gap-6 sm:grid-cols-2">
           <div>
             <p className="eyebrow">Precios</p>
             <ul className="mt-2 text-sm">
               {prices.map((v, i) => (
-                <li key={i} className="flex justify-between border-b border-ink-line py-1">
+                <li key={i} className="flex justify-between border-b border-ink-line py-1.5">
                   <span className="text-ink-soft">
                     {i + 1} día{i + 1 > 1 ? 's' : ''}
                   </span>
-                  <span>{money(Number(v || 0))}</span>
+                  <span className="font-medium">{money(Number(v || 0))}</span>
                 </li>
               ))}
             </ul>
@@ -279,18 +382,29 @@ export default function ConfigPage() {
             <p className="eyebrow">Descuentos</p>
             <ul className="mt-2 text-sm">
               {tiers.map((t, i) => (
-                <li key={i} className="flex justify-between border-b border-ink-line py-1">
+                <li key={i} className="flex justify-between border-b border-ink-line py-1.5">
                   <span className="text-ink-soft">
                     {t.min_qty || '?'}
                     {t.no_cap ? ' o más' : ` a ${t.max_qty || '?'}`} películas
                   </span>
-                  <span>{t.percent || 0}%</span>
+                  <span className="font-medium">{t.percent || 0}%</span>
                 </li>
               ))}
             </ul>
           </div>
         </div>
       </Card>
+
+      <ConfirmDialog
+        open={!!pendingNav}
+        title="Cambios sin guardar"
+        message="Tienes cambios sin guardar en Configuración. Si sales ahora, se van a perder."
+        confirmLabel="Salir sin guardar"
+        cancelLabel="Seguir editando"
+        danger
+        onCancel={() => setPendingNav(null)}
+        onConfirm={confirmLeave}
+      />
     </div>
   );
 }

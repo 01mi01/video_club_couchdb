@@ -267,7 +267,7 @@ export default function ClientDetailPage() {
 function Row({ k, v, wide }) {
   return (
     <div className={`border-b border-ink-line py-1 ${wide ? 'sm:col-span-2' : ''}`}>
-      <dt className="text-[11px] uppercase tracking-label text-ink-soft">{k}</dt>
+      <dt className="text-xs uppercase tracking-label text-ink-soft">{k}</dt>
       <dd className="text-ink">{v}</dd>
     </div>
   );

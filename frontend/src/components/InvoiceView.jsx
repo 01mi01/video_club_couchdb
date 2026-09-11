@@ -12,7 +12,7 @@ export default function InvoiceView({ invoice, clientName, showPrint = true }) {
         <div className="flex items-start justify-between">
           <div>
             <p className="eyebrow">Video Club — Comprobante</p>
-            <h2 className="font-display text-2xl font-semibold text-ink">
+            <h2 className="text-2xl font-semibold text-ink">
               Factura N.º {invoice.number}
             </h2>
             <p className="text-sm text-ink-soft">Emitida: {dateTime(invoice.issued_at)}</p>
@@ -60,7 +60,7 @@ export default function InvoiceView({ invoice, clientName, showPrint = true }) {
               v={`− ${money(invoice.discount_amount)}`}
             />
           )}
-          <div className="flex justify-between border-t-2 border-ink pt-2 font-display text-lg font-semibold">
+          <div className="flex justify-between border-t-2 border-ink pt-2 text-lg font-semibold">
             <span>Total</span>
             <span>{money(invoice.total)}</span>
           </div>

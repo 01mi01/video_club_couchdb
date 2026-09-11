@@ -27,7 +27,7 @@ export default function VideoSearchBar({ onSearch, onClear, busy }) {
   }
 
   return (
-    <form onSubmit={submit} className="border-2 border-ink bg-white">
+    <form onSubmit={submit} className="card bg-white">
       <div className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-4">
         <Field label="Nombre" hint="Título original, en inglés o alternativo">
           <TextInput
@@ -71,7 +71,7 @@ export default function VideoSearchBar({ onSearch, onClear, busy }) {
           </Select>
         </Field>
       </div>
-      <div className="flex flex-wrap items-center justify-between gap-3 border-t-2 border-ink px-4 py-3">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-ink-line px-4 py-3">
         <label className="flex items-center gap-2 text-sm text-ink">
           <input
             type="checkbox"

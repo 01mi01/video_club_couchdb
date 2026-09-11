@@ -28,18 +28,15 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-paper px-4 py-10">
-      <div className="w-full max-w-md">
-        <div className="card bg-white">
+    <div className="flex min-h-screen items-center justify-center bg-paper px-4">
+      <div className="w-full max-w-sm">
+        <div className="card overflow-hidden bg-white">
           <RainbowStripe />
-          <div className="p-8">
-            <p className="eyebrow">Base de Datos Avanzadas — CouchDB</p>
-            <h1 className="mt-1 font-display text-4xl font-semibold leading-none text-ink">
-              Video Club
-            </h1>
-            <p className="mt-2 text-sm text-ink-soft">
-              Panel de administración. Acceso exclusivo del propietario.
-            </p>
+          <div className="px-8 py-10">
+            <div className="text-center">
+              <h1 className="text-3xl font-bold leading-none text-ink">Video Club</h1>
+              <p className="mt-2 text-sm text-ink-soft">Iniciar sesión</p>
+            </div>
 
             <form onSubmit={onSubmit} className="mt-8 space-y-4">
               {error && <Alert onClose={() => setError(null)}>{error}</Alert>}
@@ -61,15 +58,12 @@ export default function LoginPage() {
                   required
                 />
               </Field>
-              <Button type="submit" className="w-full" disabled={busy}>
+              <Button type="submit" className="mt-2 w-full" disabled={busy}>
                 {busy ? 'Ingresando…' : 'Ingresar'}
               </Button>
             </form>
           </div>
         </div>
-        <p className="mt-4 text-center text-xs text-ink-soft">
-          El usuario administrador se crea con <code>scripts/create-admin.js</code> en el backend.
-        </p>
       </div>
     </div>
   );

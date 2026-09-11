@@ -112,7 +112,7 @@ export default function OscarCategoriesPage() {
                   <th>Español</th>
                   <th>Inglés</th>
                   <th className="w-28">Estado</th>
-                  <th className="w-48 text-right">Acciones</th>
+                  <th className="whitespace-nowrap text-right">Acciones</th>
                 </tr>
               </thead>
               <tbody>

@@ -1,6 +1,7 @@
-// Piezas de UI pequenas y reutilizables, con el lenguaje visual
-// retro-editorial (bordes rectos, azul ancla, franjas de color como
-// acento estructural). Ver CLAUDE.md > Frontend - Diseno visual.
+// Piezas de UI pequenas y reutilizables: panel de administracion moderno
+// (bordes suaves, tarjetas redondeadas) que conserva la paleta de marca y
+// la franja de colores como acento estructural. Ver CLAUDE.md > Frontend
+// - Diseno visual.
 
 export function RainbowStripe({ thin = false, className = '' }) {
   return <div className={`rainbow-stripe ${thin ? 'rainbow-stripe-thin' : ''} ${className}`} />;
@@ -29,15 +30,15 @@ export function Card({ children, className = '', accent = true }) {
 
 export function PageHeader({ title, subtitle, actions }) {
   return (
-    <div className="mb-6 border-b-2 border-ink pb-4">
+    <div className="mb-6 pb-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-3xl font-semibold leading-tight">{title}</h1>
-          {subtitle && <p className="mt-1 max-w-2xl text-sm text-ink-soft">{subtitle}</p>}
+        <div className="min-w-0">
+          <h1 className="text-2xl font-bold leading-tight sm:text-3xl">{title}</h1>
+          {subtitle && <p className="mt-1.5 max-w-2xl text-sm text-ink-soft">{subtitle}</p>}
         </div>
         {actions && <div className="flex flex-wrap gap-2">{actions}</div>}
       </div>
-      <RainbowStripe className="mt-4" />
+      <RainbowStripe className="mt-4 rounded-full" />
     </div>
   );
 }
@@ -74,13 +75,13 @@ export function Select({ children, ...props }) {
 
 export function Alert({ kind = 'error', children, onClose }) {
   const styles = {
-    error: 'border-rust bg-rust/10 text-rust',
-    success: 'border-teal bg-teal/10 text-teal',
-    info: 'border-ink bg-cream/50 text-ink',
-    warn: 'border-orange bg-orange/10 text-[#9a5a12]',
+    error: 'border-rust/30 bg-rust/10 text-rust',
+    success: 'border-teal/30 bg-teal/10 text-teal',
+    info: 'border-ink-line bg-paper-panel text-ink',
+    warn: 'border-orange/30 bg-orange/10 text-[#9a5a12]',
   }[kind];
   return (
-    <div className={`flex items-start justify-between gap-3 border-2 ${styles} px-4 py-3 text-sm`}>
+    <div className={`flex items-start justify-between gap-3 rounded-lg border ${styles} px-4 py-3 text-sm`}>
       <div className="whitespace-pre-wrap">{children}</div>
       {onClose && (
         <button onClick={onClose} className="shrink-0 text-lg leading-none" aria-label="Cerrar">
@@ -93,15 +94,15 @@ export function Alert({ kind = 'error', children, onClose }) {
 
 export function Badge({ children, tone = 'ink' }) {
   const tones = {
-    ink: 'border-ink bg-white text-ink',
-    teal: 'border-teal bg-teal/10 text-teal',
-    gold: 'border-gold bg-gold/20 text-[#8a5a10]',
-    rust: 'border-rust bg-rust/10 text-rust',
-    soft: 'border-ink-line bg-paper-panel text-ink-soft',
+    ink: 'bg-ink/10 text-ink',
+    teal: 'bg-teal/10 text-teal',
+    gold: 'bg-gold/20 text-[#8a5a10]',
+    rust: 'bg-rust/10 text-rust',
+    soft: 'bg-paper-panel text-ink-soft',
   };
   return (
     <span
-      className={`inline-block border px-2 py-0.5 text-[11px] font-semibold uppercase tracking-label ${tones[tone] || tones.ink}`}
+      className={`inline-block rounded-full px-2.5 py-1 text-xs font-semibold ${tones[tone] || tones.ink}`}
     >
       {children}
     </span>
@@ -111,7 +112,7 @@ export function Badge({ children, tone = 'ink' }) {
 export function Spinner({ label = 'Cargando…' }) {
   return (
     <div className="flex items-center gap-3 py-10 text-ink-soft">
-      <span className="inline-block h-4 w-4 animate-spin border-2 border-ink border-t-transparent" />
+      <span className="inline-block h-5 w-5 animate-spin rounded-full border-2 border-ink border-t-transparent" />
       <span className="text-sm">{label}</span>
     </div>
   );
@@ -119,8 +120,8 @@ export function Spinner({ label = 'Cargando…' }) {
 
 export function EmptyState({ title = 'Sin datos', hint }) {
   return (
-    <div className="border-2 border-dashed border-ink-line px-6 py-12 text-center">
-      <p className="font-display text-lg text-ink">{title}</p>
+    <div className="rounded-xl border border-dashed border-ink-line px-6 py-12 text-center">
+      <p className="text-lg font-semibold text-ink">{title}</p>
       {hint && <p className="mt-1 text-sm text-ink-soft">{hint}</p>}
     </div>
   );

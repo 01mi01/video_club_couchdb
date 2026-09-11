@@ -195,7 +195,7 @@ export default function LoanDetailPage() {
               k={`Descuento (${loan.pricing?.discount_percent}%)`}
               v={`− ${money(loan.pricing?.discount_amount)}`}
             />
-            <div className="flex justify-between border-t-2 border-ink pt-2 font-display text-lg font-semibold">
+            <div className="flex justify-between border-t border-ink-line pt-2 text-lg font-semibold">
               <span>Total</span>
               <span>{money(loan.pricing?.total_amount)}</span>
             </div>

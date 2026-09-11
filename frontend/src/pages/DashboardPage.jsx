@@ -4,14 +4,19 @@ import * as API from '../api/endpoints.js';
 import { PageHeader, Card, Spinner, Alert, Badge, Button, RainbowStripe } from '../components/ui.jsx';
 import { money, dateShort, daysOverdue } from '../lib/format.js';
 
+// Tarjeta de indicador (KPI). Conserva la franja de colores como acento
+// de marca — es lo único "decorativo" que se mantiene del diseño anterior.
 function Stat({ label, value, to, tone = 'ink' }) {
-  const border = { ink: 'border-ink', teal: 'border-teal', gold: 'border-gold', rust: 'border-rust' }[tone];
+  const dot = { ink: 'bg-ink', teal: 'bg-teal', gold: 'bg-gold', rust: 'bg-rust' }[tone];
   return (
-    <Link to={to} className={`card block border-2 ${border} transition-transform hover:-translate-y-0.5`}>
+    <Link to={to} className="card block overflow-hidden transition-shadow hover:shadow-lg">
       <RainbowStripe />
       <div className="p-5">
-        <p className="eyebrow">{label}</p>
-        <p className="mt-2 font-display text-4xl font-semibold text-ink">{value}</p>
+        <div className="flex items-center gap-2">
+          <span className={`h-2 w-2 rounded-full ${dot}`} />
+          <p className="eyebrow">{label}</p>
+        </div>
+        <p className="mt-2 text-4xl font-bold text-ink">{value}</p>
       </div>
     </Link>
   );
@@ -20,20 +25,19 @@ function Stat({ label, value, to, tone = 'ink' }) {
 export default function DashboardPage() {
   const navigate = useNavigate();
   const { data, loading, error } = useAsync(async () => {
-    const [health, videos, clients, loans, genres] = await Promise.all([
-      API.getHealth().catch(() => null),
+    const [videos, clients, loans, genres] = await Promise.all([
       API.listVideos(),
       API.listClients(),
       API.listLoans(),
       API.listGenres(),
     ]);
-    return { health, videos, clients, loans, genres };
+    return { videos, clients, loans, genres };
   }, []);
 
   if (loading) return <Spinner label="Cargando panel…" />;
   if (error) return <Alert>{error}</Alert>;
 
-  const { health, videos, clients, loans, genres } = data;
+  const { videos, clients, loans, genres } = data;
   const activos = loans.filter((l) => l.status === 'active');
   const vencidos = activos.filter((l) => daysOverdue(l.due_date) > 0);
   const bloqueados = clients.filter((c) => c.blocked?.is_blocked);
@@ -47,21 +51,8 @@ export default function DashboardPage() {
     <div>
       <PageHeader
         title="Panel"
-        subtitle="Resumen del videoclub: estado del backend, catálogo, clientes y préstamos en curso."
-        actions={
-          <Button variant="accent" onClick={() => navigate('/prestamos/nuevo')}>
-            Nuevo préstamo
-          </Button>
-        }
+        actions={<Button onClick={() => navigate('/prestamos/nuevo')}>+ Nuevo préstamo</Button>}
       />
-
-      <div className="mb-4 flex flex-wrap items-center gap-2 text-sm">
-        <span className="eyebrow">Backend</span>
-        {health ? <Badge tone="teal">Conectado</Badge> : <Badge tone="rust">Sin respuesta</Badge>}
-        <span className="text-ink-soft">
-          {import.meta.env.VITE_API_URL || 'http://localhost:3001/api'}
-        </span>
-      </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Stat label="Películas" value={videos.length} to="/videos" tone="ink" />
@@ -70,9 +61,9 @@ export default function DashboardPage() {
         <Stat label="Préstamos activos" value={activos.length} to="/prestamos" tone="rust" />
       </div>
 
-      <div className="mt-6 grid gap-4 lg:grid-cols-2">
+      <div className="mt-4 grid gap-4 lg:grid-cols-2">
         <Card>
-          <h2 className="text-xl font-semibold">Copias</h2>
+          <h2 className="text-lg font-semibold">Copias</h2>
           <dl className="mt-3 space-y-2 text-sm">
             <div className="flex justify-between border-b border-ink-line pb-2">
               <dt className="text-ink-soft">Total de copias</dt>
@@ -90,7 +81,7 @@ export default function DashboardPage() {
         </Card>
 
         <Card>
-          <h2 className="text-xl font-semibold">Atención</h2>
+          <h2 className="text-lg font-semibold">Atención</h2>
           <ul className="mt-3 space-y-2 text-sm">
             <li className="flex items-center justify-between border-b border-ink-line pb-2">
               <span className="text-ink-soft">Préstamos vencidos (sin devolver)</span>
@@ -102,10 +93,10 @@ export default function DashboardPage() {
             </li>
           </ul>
           {vencidos.length > 0 && (
-            <div className="mt-3 space-y-1 border-t border-ink-line pt-3 text-xs text-ink-soft">
+            <div className="mt-3 space-y-1.5 border-t border-ink-line pt-3 text-xs text-ink-soft">
               {vencidos.slice(0, 5).map((l) => (
                 <div key={l._id} className="flex justify-between gap-2">
-                  <Link className="underline hover:text-ink" to={`/prestamos/${l._id}`}>
+                  <Link className="font-medium text-ink hover:underline" to={`/prestamos/${l._id}`}>
                     {l._id.slice(0, 18)}…
                   </Link>
                   <span>

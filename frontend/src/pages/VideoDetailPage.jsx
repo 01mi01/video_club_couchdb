@@ -314,7 +314,7 @@ export default function VideoDetailPage() {
 function Row({ k, v }) {
   return (
     <div className="border-b border-ink-line py-1">
-      <dt className="text-[11px] uppercase tracking-label text-ink-soft">{k}</dt>
+      <dt className="text-xs uppercase tracking-label text-ink-soft">{k}</dt>
       <dd className="text-ink">{v}</dd>
     </div>
   );
@@ -324,7 +324,7 @@ function Line({ k, v, tone }) {
   return (
     <div className="flex items-center justify-between border-b border-ink-line pb-1">
       <span className="text-ink-soft">{k}</span>
-      <span className={`font-display text-lg font-semibold ${c}`}>{v}</span>
+      <span className={`text-lg font-semibold ${c}`}>{v}</span>
     </div>
   );
 }

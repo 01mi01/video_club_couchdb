@@ -316,7 +316,7 @@ export default function ConfigPage() {
                       <span className="text-ink-soft">%</span>
                     </div>
                   </label>
-                  <div className="flex flex-col justify-between gap-2">
+                  <div className="flex flex-col justify-start gap-2 sm:pt-5">
                     <label className="flex items-center gap-2 text-xs text-ink">
                       <input
                         type="checkbox"

@@ -9,11 +9,12 @@
  */
 
 const clientRepo = require('../repositories/clientRepository');
+const zoneRepo = require('../repositories/zoneRepository');
 const { badRequest, conflict } = require('../utils/errors');
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-function normalize(body, { partial = false } = {}) {
+async function normalize(body, { partial = false, existingZoneId = null } = {}) {
   const out = {};
   const req = (field, label) => {
     if (!partial && !String(body[field] || '').trim()) {
@@ -24,8 +25,11 @@ function normalize(body, { partial = false } = {}) {
   req('first_name', 'nombre');
   req('paternal_surname', 'apellido paterno');
   req('phone_mobile', 'teléfono celular');
-  req('email', 'correo');
   req('birth_date', 'fecha de nacimiento');
+  // `email` es OPCIONAL: el enunciado del profesor lo lista como dato a
+  // capturar pero nunca lo marca obligatorio (a diferencia de teléfono,
+  // fecha de nacimiento, etc.). Si se provee, igual se exige formato
+  // válido (ver EMAIL_RE más abajo).
 
   if (body.first_name !== undefined) out.first_name = String(body.first_name).trim();
   if (body.paternal_surname !== undefined)
@@ -40,7 +44,7 @@ function normalize(body, { partial = false } = {}) {
   if (body.email !== undefined) {
     const email = String(body.email).trim().toLowerCase();
     if (email && !EMAIL_RE.test(email)) throw badRequest('`email` no tiene formato válido.');
-    out.email = email;
+    out.email = email || null;
   }
 
   if (body.birth_date !== undefined) {
@@ -51,27 +55,43 @@ function normalize(body, { partial = false } = {}) {
   }
 
   // Dirección + geolocalización de la dirección.
+  //
+  // DECISIÓN (resuelve un problema real de captura de datos): en vez de
+  // pedirle al empleado que teclee lat/lng exactos a mano, la
+  // "geolocalización de la dirección" que exige el enunciado se resuelve
+  // con una ZONA preconfigurada (documento normalizado propio, mismo
+  // patrón que género/categoría de Oscar — ver zoneRepository.js). El
+  // cliente guarda `address.zone_id`, nunca lat/lng embebidos: la
+  // geolocalización real se obtiene resolviendo la zona referenciada.
   if (body.address !== undefined || !partial) {
     const addr = body.address || {};
     const text = String(addr.text || '').trim();
     if (!partial && !text) throw badRequest('`address.text` (dirección) es obligatorio.');
-    let geo = null;
-    if (addr.geo && addr.geo.lat !== undefined && addr.geo.lng !== undefined) {
-      const lat = Number(addr.geo.lat);
-      const lng = Number(addr.geo.lng);
-      if (!Number.isFinite(lat) || lat < -90 || lat > 90 || !Number.isFinite(lng) || lng < -180 || lng > 180) {
-        throw badRequest('`address.geo` fuera de rango (lat -90..90, lng -180..180).');
+
+    let zone_id = null;
+    const rawZoneId = addr.zone_id !== undefined ? addr.zone_id : addr.zoneId;
+    if (rawZoneId) {
+      const zone = await zoneRepo.tryGetById(rawZoneId);
+      if (!zone || zone.type !== 'zone') throw badRequest(`Zona inexistente: ${rawZoneId}`);
+      // Mismo criterio que género/categoría de Oscar (ver
+      // videoService.normalizeVideoInput): una zona INACTIVA no se puede
+      // asignar a un cliente NUEVO ni AGREGAR en una edición, pero si el
+      // cliente YA la tenía, conservarla no cuenta como "asignar".
+      if (zone.active === false && rawZoneId !== existingZoneId) {
+        throw badRequest(
+          `La zona "${zone.name}" está inactiva: no se puede asignar a clientes nuevos ni agregar en una edición.`
+        );
       }
-      geo = { lat, lng };
+      zone_id = rawZoneId;
     }
-    out.address = { text, geo };
+    out.address = { text, zone_id };
   }
 
   return out;
 }
 
 async function create(body) {
-  const data = normalize(body, { partial: false });
+  const data = await normalize(body, { partial: false });
   // Apellido materno opcional: si no vino, se guarda explícitamente como
   // `null` (no ausente) para que TODOS los clientes tengan la misma forma.
   if (data.maternal_surname === undefined) data.maternal_surname = null;
@@ -90,7 +110,15 @@ async function getById(id) {
 
 /** 2. Actualizar datos. No cambia el estado de bloqueo (tiene su endpoint). */
 async function update(id, body) {
-  const patch = normalize(body, { partial: true });
+  // Lectura previa SOLO para conocer la zona ya asociada (permite
+  // distinguir "conservar una zona inactiva que ya tenía" de "agregar una
+  // inactiva nueva" — mismo patrón que `videoService.update` con
+  // `genre_ids`). La escritura real sigue yendo por `clientRepo.update`.
+  const current = await clientRepo.getById(id);
+  const patch = await normalize(body, {
+    partial: true,
+    existingZoneId: current.address?.zone_id || null,
+  });
   if (Object.keys(patch).length === 0) throw badRequest('Nada que actualizar.');
   return clientRepo.update(id, (doc) => {
     if (patch.address) {

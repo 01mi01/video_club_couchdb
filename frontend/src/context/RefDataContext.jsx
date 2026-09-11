@@ -11,6 +11,7 @@ const RefDataContext = createContext(null);
 export function RefDataProvider({ children }) {
   const [genres, setGenres] = useState([]);
   const [oscarCategories, setOscarCategories] = useState([]);
+  const [zones, setZones] = useState([]);
   const [clients, setClients] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -34,6 +35,12 @@ export function RefDataProvider({ children }) {
     return o;
   }, []);
 
+  const refreshZones = useCallback(async () => {
+    const z = await API.listZones();
+    setZones(Array.isArray(z) ? z : []);
+    return z;
+  }, []);
+
   const refreshClients = useCallback(async () => {
     const c = await API.listClients();
     setClients(Array.isArray(c) ? c : []);
@@ -45,14 +52,16 @@ export function RefDataProvider({ children }) {
   const reload = useCallback(async () => {
     setLoading(true);
     try {
-      const [g, o, c] = await Promise.all([
+      const [g, o, z, c] = await Promise.all([
         API.listGenres(),
         API.listOscarCategories(),
+        API.listZones(),
         API.listClients(),
       ]);
       if (!alive.current) return;
       setGenres(Array.isArray(g) ? g : []);
       setOscarCategories(Array.isArray(o) ? o : []);
+      setZones(Array.isArray(z) ? z : []);
       setClients(Array.isArray(c) ? c : []);
       setError(null);
     } catch (e) {
@@ -78,6 +87,8 @@ export function RefDataProvider({ children }) {
     (ids) => (ids || []).map(oscarCategoryName),
     [oscarCategoryName]
   );
+  const zoneById = useCallback((id) => zones.find((x) => x._id === id) || null, [zones]);
+  const zoneName = useCallback((id) => zones.find((x) => x._id === id)?.name || null, [zones]);
   const clientById = useCallback((id) => clients.find((x) => x._id === id) || null, [clients]);
   const clientName = useCallback(
     (id) => {
@@ -92,17 +103,21 @@ export function RefDataProvider({ children }) {
       value={{
         genres,
         oscarCategories,
+        zones,
         clients,
         loading,
         error,
         reload,
         refreshGenres,
         refreshOscarCategories,
+        refreshZones,
         refreshClients,
         genreName,
         genreNames,
         oscarCategoryName,
         oscarCategoryNames,
+        zoneById,
+        zoneName,
         clientById,
         clientName,
       }}

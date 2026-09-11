@@ -9,11 +9,20 @@
  *     // --- Títulos -------------------------------------------------------
  *     // El enunciado pide "título con varios alternativos, incluyendo en
  *     // idioma original y en inglés". Se guardan estructurados...
+ *     //
+ *     // SIMPLIFICACIÓN DE MODELO: no hay un campo `english_title` separado
+ *     // — resultaba redundante con `alternative_titles[]` (un título en
+ *     // inglés es, para el modelo, un título alternativo más entre otros).
+ *     // Se migró con `scripts/migrate-video-titles.js` (mueve cualquier
+ *     // valor real de `english_title` a `alternative_titles[]` antes de
+ *     // borrar el campo — ver ese script para el detalle y la
+ *     // verificación documento por documento).
  *     display_title:      "string",      // el título principal para mostrar
  *     original_title:     "string",
  *     original_language:  "string",      // idioma original
- *     english_title:      "string",
  *     alternative_titles: ["string", ...],
+ *     director:            "string" | null, // opcional — ver comentario en
+ *                                             // videoService.normalizeVideoInput
  *     // ...y ADEMÁS dos arreglos planos denormalizados con TODOS los
  *     // títulos, recalculados en cada escritura:
  *     //   all_titles    -> para MOSTRAR (tal cual, con acentos/mayúsculas).

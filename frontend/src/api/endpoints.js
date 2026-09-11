@@ -47,6 +47,16 @@ export const addCopies = (id, body) => data(api.post(`/videos/${id}/copies`, bod
 export const retireCopy = (id, copyId, body) =>
   data(api.post(`/videos/${id}/copies/${copyId}/retire`, body));
 
+// --- Zonas (geolocalización preconfigurada; mismo patrón que género) ---
+// El cliente referencia una zona por id (address.zone_id) en vez de que el
+// empleado teclee lat/lng a mano.
+export const listZones = () => data(api.get('/zones'));
+export const getZone = (id) => data(api.get(`/zones/${id}`));
+export const createZone = (body) => data(api.post('/zones', body));
+export const updateZone = (id, body) => data(api.put(`/zones/${id}`, body));
+export const deactivateZone = (id) => data(api.patch(`/zones/${id}/deactivate`));
+export const activateZone = (id) => data(api.patch(`/zones/${id}/activate`));
+
 // --- Clientes ---
 export const listClients = () => data(api.get('/clients', { params: { limit: 1000 } }));
 export const getClient = (id) => data(api.get(`/clients/${id}`));

@@ -10,6 +10,7 @@ const NAV = [
   { to: '/videos', label: 'Películas' },
   { to: '/generos', label: 'Géneros' },
   { to: '/categorias-oscar', label: 'Categorías Oscar' },
+  { to: '/zonas', label: 'Zonas' },
   { to: '/clientes', label: 'Clientes' },
   { to: '/prestamos', label: 'Préstamos' },
   { to: '/facturas', label: 'Facturas' },

@@ -112,7 +112,7 @@ export default function VideoDetailPage() {
           <dl className="mt-3 grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
             <Row k="Título original" v={v.original_title} />
             <Row k="Idioma original" v={v.original_language || '—'} />
-            <Row k="Título en inglés" v={v.english_title || '—'} />
+            <Row k="Director" v={v.director || '—'} />
             <Row k="Títulos alternativos" v={(v.alternative_titles || []).join(' · ') || '—'} />
             <Row k="Actores principales" v={(v.main_actors || []).join(', ') || '—'} />
             <Row k="Costo unitario DVD" v={money(v.unit_cost)} />

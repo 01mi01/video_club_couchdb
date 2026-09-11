@@ -192,7 +192,7 @@ async function testClients() {
       phone_mobile: '70000000',
       email: `${RUN.toLowerCase()}@example.com`,
       birth_date: '1990-01-01',
-      address: { text: 'Calle Falsa 123', geo: { lat: -17.78, lng: -63.18 } },
+      address: { text: 'Calle Falsa 123', zone_id: null },
     });
     created.clients.push(client._id);
     const fromDb = await rawGet(client._id);
@@ -220,7 +220,7 @@ async function testClients() {
       phone_mobile: '70000001',
       email: `${RUN.toLowerCase()}.tmp@example.com`,
       birth_date: '1985-05-05',
-      address: { text: 'Av. Temporal 1', geo: null },
+      address: { text: 'Av. Temporal 1', zone_id: null },
     });
     await couchRepo.remove(tmp._id, { label: 'Cliente' });
     const fromDb = await rawGet(tmp._id);
@@ -249,8 +249,8 @@ async function testVideos() {
     video = await videoService.create({
       display_title: `${RUN} La Película`,
       original_title: `${RUN} Original`,
-      english_title: `${RUN} The Movie`,
-      alternative_titles: [`${RUN} Alt`],
+      director: `${RUN} Director`,
+      alternative_titles: [`${RUN} Alt`, `${RUN} The Movie`],
       duration_minutes: 100,
       genre_ids: [genre._id],
       release_year: 2001,
@@ -393,7 +393,7 @@ async function testLoans() {
     phone_mobile: '72222222',
     email: `${RUN.toLowerCase()}.prest@example.com`,
     birth_date: '1992-03-03',
-    address: { text: 'Zona Central s/n', geo: null },
+    address: { text: 'Zona Central s/n', zone_id: null },
   });
   created.clients.push(client._id);
 

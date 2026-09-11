@@ -7,6 +7,7 @@ const healthRoute = require('./routes/health');
 const authRoute = require('./routes/auth');
 const genresRoute = require('./routes/genres');
 const oscarCategoriesRoute = require('./routes/oscarCategories');
+const zonesRoute = require('./routes/zones');
 const videosRoute = require('./routes/videos');
 const clientsRoute = require('./routes/clients');
 const loansRoute = require('./routes/loans');
@@ -29,6 +30,7 @@ app.use('/api', authMiddleware);
 
 app.use('/api/genres', genresRoute);
 app.use('/api/oscar-categories', oscarCategoriesRoute);
+app.use('/api/zones', zonesRoute);
 app.use('/api/videos', videosRoute);
 app.use('/api/clients', clientsRoute);
 app.use('/api/loans', loansRoute);

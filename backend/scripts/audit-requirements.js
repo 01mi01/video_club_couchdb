@@ -28,12 +28,13 @@ const configRepo = require('../repositories/configRepository');
 const genreService = require('../services/genreService');
 const videoService = require('../services/videoService');
 const clientService = require('../services/clientService');
+const zoneService = require('../services/zoneService');
 const loanService = require('../services/loanService');
 const configService = require('../services/configService');
 
 const RUN = `AUDIT_DELETE_ME_${Date.now()}`;
 const DAY = 86400000;
-const created = { genres: [], videos: [], clients: [], loans: [], invoices: [] };
+const created = { genres: [], videos: [], clients: [], loans: [], invoices: [], zones: [] };
 
 const rows = [];
 let currentReq = '';
@@ -93,8 +94,8 @@ async function main() {
       display_title: `${RUN} Pelicula`,
       original_title: `${RUN} Título Original`,
       original_language: 'Coreano',
-      english_title: `${RUN} The Movie`,
-      alternative_titles: [`${RUN} Alt Uno`, `${RUN} Alt Dós`],
+      director: `${RUN} Director`,
+      alternative_titles: [`${RUN} Alt Uno`, `${RUN} Alt Dós`, `${RUN} The Movie`],
       duration_minutes: 132,
       genre_ids: [g1._id, g2._id], // MÁS DE UN GÉNERO
       release_year: 2019,
@@ -111,9 +112,9 @@ async function main() {
   check('duración en minutos persistida', vdb.duration_minutes === 132);
   check('pertenece a MÁS DE UN género (genre_ids)', (vdb.genre_ids || []).length === 2 && vdb.genre_ids.includes(g1._id) && vdb.genre_ids.includes(g2._id));
   check('título original + idioma original persistidos', vdb.original_title === `${RUN} Título Original` && vdb.original_language === 'Coreano');
-  check('título en inglés persistido', vdb.english_title === `${RUN} The Movie`);
-  check('títulos alternativos persistidos', (vdb.alternative_titles || []).length === 2);
-  check('all_titles agrega todas las variantes', ['display_title', 'original_title', 'english_title'].every((k) => vdb.all_titles.includes(vdb[k])) && vdb.all_titles.length >= 5);
+  check('director persistido', vdb.director === `${RUN} Director`);
+  check('títulos alternativos persistidos (incluye título en inglés, ya sin campo dedicado)', (vdb.alternative_titles || []).length === 3);
+  check('all_titles agrega todas las variantes', ['display_title', 'original_title'].every((k) => vdb.all_titles.includes(vdb[k])) && vdb.all_titles.length >= 5);
   check('año de publicación persistido', vdb.release_year === 2019);
   check('nominaciones al Oscar persistidas', vdb.oscar_nominations.includes('Best Picture') && vdb.oscar_nominations.includes('Best Film Editing'));
   check('premios Oscar ganados persistidos', vdb.oscar_wins.includes('Best Director') && vdb.oscar_wins.includes('Best International Feature Film'));
@@ -179,13 +180,20 @@ async function main() {
 
   // ---- C1: Registrar nuevos clientes con todos los campos --------------
   req('C1', 'Registrar nuevos clientes (nombre + apellidos paterno/materno, celular, correo, nacimiento, dirección, geolocalización, fecha de registro)');
+
+  // Zona de prueba: la geolocalización de la dirección ahora se resuelve
+  // por REFERENCIA a una zona preconfigurada (ver zoneService.js), no por
+  // lat/lng tecleados a mano.
+  const zona = await zoneService.create({ name: `${RUN}_zona`, geo: { lat: -16.5, lng: -68.15 } });
+  created.zones.push(zona._id);
+
   let client;
   await expectOk('POST /api/clients crea el cliente con todos los campos', async () => {
     client = await clientService.create({
       first_name: 'John', paternal_surname: 'Audit', maternal_surname: 'Doe',
       phone_mobile: '71234567', email: `${RUN.toLowerCase()}@example.com`,
       birth_date: '1990-05-20',
-      address: { text: 'Av. Auditoría 100, La Paz', geo: { lat: -16.5, lng: -68.15 } },
+      address: { text: 'Av. Auditoría 100, La Paz', zone_id: zona._id },
       registered_at: '2025-12-01T10:00:00.000Z',
     });
     created.clients.push(client._id);
@@ -197,7 +205,7 @@ async function main() {
   check('correo persistido', cdb.email === `${RUN.toLowerCase()}@example.com`);
   check('fecha de nacimiento persistida', cdb.birth_date === '1990-05-20');
   check('dirección persistida', cdb.address.text.includes('Av. Auditoría'));
-  check('geolocalización de la dirección persistida (lat/lng)', cdb.address.geo && cdb.address.geo.lat === -16.5 && cdb.address.geo.lng === -68.15);
+  check('geolocalización de la dirección persistida (referencia a zona)', cdb.address.zone_id === zona._id);
   check('fecha de registro persistida', cdb.registered_at === '2025-12-01T10:00:00.000Z');
   check('nace NO bloqueado', cdb.blocked && cdb.blocked.is_blocked === false);
 
@@ -205,7 +213,7 @@ async function main() {
     const c2 = await clientService.create({
       first_name: 'Anna', paternal_surname: 'Solo',
       phone_mobile: '70000000', email: `${RUN.toLowerCase()}.anna@example.com`,
-      birth_date: '1995-01-01', address: { text: 'Calle Sola 1', geo: null },
+      birth_date: '1995-01-01', address: { text: 'Calle Sola 1', zone_id: null },
     });
     created.clients.push(c2._id);
     const fresh = await rawGet(c2._id);
@@ -213,20 +221,31 @@ async function main() {
     return 'materno = null';
   });
 
+  await expectOk('permite cliente SIN correo (opcional — el enunciado lo lista pero no lo exige)', async () => {
+    const c3 = await clientService.create({
+      first_name: 'Mark', paternal_surname: 'NoEmail',
+      phone_mobile: '70000002', birth_date: '1992-02-02',
+      address: { text: 'Calle Sin Correo 1', zone_id: null },
+    });
+    created.clients.push(c3._id);
+    const fresh = await rawGet(c3._id);
+    A(fresh.email === null, `email debería ser null, es ${JSON.stringify(fresh.email)}`);
+    return 'email = null';
+  });
+
   const baseClient = {
     first_name: 'Test', paternal_surname: 'Test', phone_mobile: '70000001',
     email: `${RUN.toLowerCase()}.v@example.com`, birth_date: '1990-01-01',
-    address: { text: 'Calle 1', geo: null },
+    address: { text: 'Calle 1', zone_id: null },
   };
   await expectReject('rechaza sin nombre', () => clientService.create({ ...baseClient, first_name: '' }), /obligatorio|first_name/i);
   await expectReject('rechaza sin apellido paterno', () => clientService.create({ ...baseClient, paternal_surname: '' }), /obligatorio|paternal/i);
   await expectReject('rechaza sin teléfono', () => clientService.create({ ...baseClient, phone_mobile: '' }), /obligatorio|phone/i);
-  await expectReject('rechaza sin correo', () => clientService.create({ ...baseClient, email: '' }), /obligatorio|email/i);
   await expectReject('rechaza correo con formato inválido', () => clientService.create({ ...baseClient, email: 'no-es-correo' }), /email|formato/i);
   await expectReject('rechaza sin fecha de nacimiento', () => clientService.create({ ...baseClient, birth_date: '' }), /obligatorio|birth_date/i);
   await expectReject('rechaza fecha de nacimiento futura', () => clientService.create({ ...baseClient, birth_date: '2999-01-01' }), /futura|birth_date/i);
-  await expectReject('rechaza sin dirección', () => clientService.create({ ...baseClient, address: { text: '', geo: null } }), /dirección|address/i);
-  await expectReject('rechaza geolocalización fuera de rango', () => clientService.create({ ...baseClient, address: { text: 'x', geo: { lat: 200, lng: 0 } } }), /geo|rango/i);
+  await expectReject('rechaza sin dirección', () => clientService.create({ ...baseClient, address: { text: '', zone_id: null } }), /dirección|address/i);
+  await expectReject('rechaza zona inexistente', () => clientService.create({ ...baseClient, address: { text: 'x', zone_id: 'zone:no-existe' } }), /zona|zone/i);
 
   // ---- C2: Actualizar datos de clientes -------------------------------
   req('C2', 'Actualizar datos de clientes');
@@ -550,6 +569,7 @@ async function limpiar() {
   const grupos = [
     ['invoice', created.invoices], ['loan', created.loans],
     ['video', created.videos], ['client', created.clients], ['genre', created.genres],
+    ['zone', created.zones],
   ];
   let n = 0;
   for (const [, ids] of grupos) {

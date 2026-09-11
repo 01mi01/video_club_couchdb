@@ -31,9 +31,14 @@ const { badRequest, notFound, conflict } = require('../utils/errors');
  * (con acentos y mayúsculas) para mostrarlo en la app / API.
  * La búsqueda NO se hace contra este campo, sino contra `search_titles`
  * (ver `foldForSearch` / `buildSearchTitles`).
+ *
+ * NOTA (simplificación de modelo): ya NO existe un campo `english_title`
+ * separado — era redundante con `alternative_titles[]` (un título en
+ * inglés es, para el modelo, un título alternativo más). Ver migración
+ * `scripts/migrate-video-titles.js`.
  */
-function buildAllTitles({ display_title, original_title, english_title, alternative_titles }) {
-  const all = [display_title, original_title, english_title, ...(alternative_titles || [])]
+function buildAllTitles({ display_title, original_title, alternative_titles }) {
+  const all = [display_title, original_title, ...(alternative_titles || [])]
     .map((t) => (typeof t === 'string' ? t.trim() : ''))
     .filter(Boolean);
   return [...new Set(all)];
@@ -123,12 +128,20 @@ async function normalizeVideoInput(
     out.display_title = display_title;
     out.original_title = (body.original_title || '').trim() || display_title;
     out.original_language = (body.original_language || '').trim() || null;
-    out.english_title = (body.english_title || '').trim() || null;
     out.alternative_titles = Array.isArray(body.alternative_titles)
       ? body.alternative_titles.map((t) => String(t).trim()).filter(Boolean)
       : [];
     out.all_titles = buildAllTitles(out); // para mostrar (con acentos)
     out.search_titles = buildSearchTitles(out.all_titles); // para buscar (sin acentos, minúsculas)
+  }
+
+  // --- Director ---
+  // Campo simple (string), opcional: el profesor no lo pidió explícitamente,
+  // pero CouchDB permite extender el esquema sin migración compleja — un
+  // buen ejemplo de flexibilidad document-based frente a uno relacional
+  // (ver comentario en CLAUDE.md, sección "Ajuste al modelo de video").
+  if (body.director !== undefined) {
+    out.director = (body.director || '').trim() || null;
   }
 
   // --- Duración ---

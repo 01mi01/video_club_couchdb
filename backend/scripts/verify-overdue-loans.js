@@ -75,7 +75,7 @@ async function main() {
     phone_mobile: '70000000',
     email: `${RUN.toLowerCase()}@example.com`,
     birth_date: '1990-01-01',
-    address: { text: 'Calle Descartable 1', geo: null },
+    address: { text: 'Calle Descartable 1', zone_id: null },
   });
   created.clients.push(client._id);
 

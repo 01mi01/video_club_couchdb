@@ -10,7 +10,7 @@ const EMPTY = {
   display_title: '',
   original_title: '',
   original_language: '',
-  english_title: '',
+  director: '',
   alternative_titles: [],
   duration_minutes: '',
   genre_ids: [],
@@ -46,6 +46,7 @@ export default function VideoFormPage() {
           release_year: v.release_year ?? '',
           unit_cost: v.unit_cost ?? '',
           units_acquired: v.units_acquired ?? '',
+          director: v.director || '',
           alternative_titles: v.alternative_titles || [],
           oscar_nominations: v.oscar_nominations || [],
           oscar_wins: v.oscar_wins || [],
@@ -110,7 +111,7 @@ export default function VideoFormPage() {
       display_title: form.display_title.trim(),
       original_title: form.original_title.trim() || undefined,
       original_language: form.original_language.trim() || undefined,
-      english_title: form.english_title.trim() || undefined,
+      director: form.director.trim() || undefined,
       alternative_titles: clean(form.alternative_titles),
       duration_minutes: Number(form.duration_minutes),
       genre_ids: form.genre_ids,
@@ -183,17 +184,18 @@ export default function VideoFormPage() {
                 placeholder="ej. Coreano"
               />
             </Field>
-            <Field label="Título en inglés">
+            <Field label="Director">
               <TextInput
-                value={form.english_title}
-                onChange={(e) => set({ english_title: e.target.value })}
+                value={form.director}
+                onChange={(e) => set({ director: e.target.value })}
+                placeholder="ej. Bong Joon-ho"
               />
             </Field>
           </div>
           <div className="mt-4">
             <StringListField
               label="Títulos alternativos"
-              hint="Otros nombres con los que se conoce la película"
+              hint="Otros nombres con los que se conoce la película, incluyendo el título en inglés si aplica"
               value={form.alternative_titles}
               onChange={(v) => set({ alternative_titles: v })}
               placeholder="ej. Parásitos"

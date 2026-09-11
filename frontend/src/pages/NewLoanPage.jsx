@@ -17,14 +17,47 @@ import {
 import Modal from '../components/Modal.jsx';
 import VideoSearchBar from '../components/VideoSearchBar.jsx';
 import InvoiceView from '../components/InvoiceView.jsx';
+import ClientFormFields, { CLIENT_EMPTY, formToClientPayload } from '../components/ClientFormFields.jsx';
 import { fullName, money, dateShort } from '../lib/format.js';
 
 export default function NewLoanPage() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { clients, clientName } = useRefData();
+  const { clients, zones, clientName, refreshClients } = useRefData();
 
   const [clientId, setClientId] = useState(location.state?.clientId || '');
+
+  // --- Alta de cliente SIN salir de "Nuevo préstamo" ---------------------
+  // Pedido explícito: poder registrar un cliente nuevo desde acá mismo en
+  // vez de tener que ir primero a "Clientes". Reutiliza el mismo
+  // formulario/validación que ClientFormPage (ver ClientFormFields.jsx) —
+  // una sola fuente de verdad, no un mini-formulario recortado aparte.
+  const [newClientOpen, setNewClientOpen] = useState(false);
+  const [newClientForm, setNewClientForm] = useState(CLIENT_EMPTY);
+  const [newClientBusy, setNewClientBusy] = useState(false);
+  const [newClientErr, setNewClientErr] = useState(null);
+
+  function openNewClient() {
+    setNewClientForm(CLIENT_EMPTY);
+    setNewClientErr(null);
+    setNewClientOpen(true);
+  }
+
+  async function submitNewClient(e) {
+    e.preventDefault();
+    setNewClientBusy(true);
+    setNewClientErr(null);
+    try {
+      const created = await API.createClient(formToClientPayload(newClientForm, { isEdit: false }));
+      await refreshClients();
+      setClientId(created._id); // seleccionarlo de inmediato para el préstamo
+      setNewClientOpen(false);
+    } catch (err) {
+      setNewClientErr(err.message);
+    } finally {
+      setNewClientBusy(false);
+    }
+  }
   const [cart, setCart] = useState([]); // [{ video_id, title, available, qty }]
   const [termMode, setTermMode] = useState('days'); // 'days' | 'due'
   const [days, setDays] = useState(2);
@@ -157,7 +190,12 @@ export default function NewLoanPage() {
         <div className="space-y-4 lg:col-span-2">
           {/* 1. Cliente */}
           <Card>
-            <h2 className="mb-3 text-xl font-semibold">1 · Cliente</h2>
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-xl font-semibold">1 · Cliente</h2>
+              <Button type="button" size="sm" variant="ghost" onClick={openNewClient}>
+                + Nuevo cliente
+              </Button>
+            </div>
             <Field label="Cliente" required>
               <Select value={clientId} onChange={(e) => setClientId(e.target.value)}>
                 <option value="">— seleccionar —</option>
@@ -356,6 +394,39 @@ export default function NewLoanPage() {
           </Card>
         </div>
       </div>
+
+      {/* Alta de cliente sin salir de "Nuevo préstamo" */}
+      <Modal
+        open={newClientOpen}
+        onClose={() => setNewClientOpen(false)}
+        title="Nuevo cliente"
+        wide
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setNewClientOpen(false)}>
+              Cancelar
+            </Button>
+            <Button form="new-client-form" type="submit" disabled={newClientBusy}>
+              {newClientBusy ? 'Guardando…' : 'Registrar cliente'}
+            </Button>
+          </>
+        }
+      >
+        <form id="new-client-form" onSubmit={submitNewClient}>
+          {newClientErr && (
+            <div className="mb-4">
+              <Alert onClose={() => setNewClientErr(null)}>{newClientErr}</Alert>
+            </div>
+          )}
+          <ClientFormFields
+            form={newClientForm}
+            set={(patch) => setNewClientForm((f) => ({ ...f, ...patch }))}
+            isEdit={false}
+            zones={zones}
+            compact
+          />
+        </form>
+      </Modal>
 
       {/* Resultado: factura emitida */}
       <Modal

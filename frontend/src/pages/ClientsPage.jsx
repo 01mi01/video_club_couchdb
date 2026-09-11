@@ -74,7 +74,7 @@ export default function ClientsPage() {
                           </Link>
                         </td>
                         <td className="whitespace-nowrap">{c.phone_mobile}</td>
-                        <td className="text-ink-soft">{c.email}</td>
+                        <td className="text-ink-soft">{c.email || '—'}</td>
                         <td className="max-w-xs truncate text-xs text-ink-soft">
                           {c.address?.text || '—'}
                         </td>

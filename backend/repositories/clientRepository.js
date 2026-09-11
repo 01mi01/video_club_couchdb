@@ -8,11 +8,14 @@
  *     paternal_surname: "string",       // apellido paterno
  *     maternal_surname: "string" | null,// apellido materno (si tiene ambos)
  *     phone_mobile:     "string",       // número de teléfono celular
- *     email:            "string",
+ *     email:            "string" | null, // opcional — el enunciado lo lista pero no lo exige
  *     birth_date:       "ISO date",     // fecha de nacimiento
  *     address: {
- *       text: "string",                 // dirección
- *       geo:  { lat: number, lng: number } | null  // geolocalización
+ *       text: "string",                 // dirección (calle, número, referencia)
+ *       zone_id: "zone:<uuid>" | null    // REFERENCIA a zona (geolocalización
+ *                                        // preconfigurada) — ver zoneRepository.js.
+ *                                        // El empleado elige una zona en vez de
+ *                                        // teclear lat/lng a mano.
  *     },
  *     registered_at:    "ISO",          // fecha de registro
  *

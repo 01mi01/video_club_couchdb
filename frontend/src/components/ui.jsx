@@ -69,11 +69,33 @@ export function TextInput(props) {
 export function TextArea(props) {
   return <textarea className="input" rows={3} {...props} />;
 }
-export function Select({ children, ...props }) {
+// Los selects nativos dibujan su propia flecha pegada al borde derecho del
+// control (chrome del navegador, ignora el `padding-right` del elemento) —
+// por eso se ve "tocando el límite" a diferencia de un <input> de texto.
+// Se desactiva esa flecha nativa (`appearance-none`) y se dibuja una propia
+// en SVG, posicionada al mismo `right` que el padding lateral de `.input`
+// (px-3.5), para que quede alineada igual que el resto del espaciado del
+// formulario. `pr-9` deja hueco suficiente para que el texto seleccionado
+// nunca quede debajo del ícono.
+export function Select({ children, className = '', ...props }) {
   return (
-    <select className="input" {...props}>
-      {children}
-    </select>
+    <div className="relative">
+      <select className={`input appearance-none pr-9 ${className}`} {...props}>
+        {children}
+      </select>
+      <svg
+        className="pointer-events-none absolute right-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-soft"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden="true"
+      >
+        <path d="m6 9 6 6 6-6" />
+      </svg>
+    </div>
   );
 }
 

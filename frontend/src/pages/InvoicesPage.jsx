@@ -47,12 +47,12 @@ export default function InvoicesPage() {
                       <td className="whitespace-nowrap">{dateShort(inv.issued_at)}</td>
                       <td>{clientName(inv.client_id)}</td>
                       <td className="whitespace-nowrap">{money(inv.total)}</td>
-                      <td>
+                      <td className="whitespace-nowrap">
                         <button
-                          className="text-xs underline hover:text-teal"
+                          className="font-mono text-xs text-ink-soft underline hover:text-teal"
                           onClick={() => navigate(`/prestamos/${inv.loan_id}`)}
                         >
-                          {inv.loan_id?.slice(0, 16)}…
+                          {inv.loan_id}
                         </button>
                       </td>
                       <td className="text-right">

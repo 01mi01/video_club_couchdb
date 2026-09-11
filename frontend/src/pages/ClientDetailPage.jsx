@@ -22,7 +22,7 @@ import { fullName, dateShort, money, LOAN_STATUS_LABEL } from '../lib/format.js'
 export default function ClientDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { refreshClients } = useRefData();
+  const { refreshClients, zoneById } = useRefData();
 
   const { data, loading, error, reload } = useAsync(async () => {
     const [client, loans] = await Promise.all([API.getClient(id), API.listLoans()]);
@@ -83,7 +83,10 @@ export default function ClientDetailPage() {
     }
   }
 
-  const geo = c.address?.geo;
+  // Geolocalización: se resuelve por REFERENCIA a la zona (mismo patrón que
+  // genreNames/oscarCategoryNames — ver clientService.js en el backend).
+  const zone = zoneById(c.address?.zone_id);
+  const geo = zone?.geo;
 
   return (
     <div>
@@ -115,17 +118,20 @@ export default function ClientDetailPage() {
           <h2 className="text-xl font-semibold">Datos</h2>
           <dl className="mt-3 grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
             <Row k="Teléfono celular" v={c.phone_mobile} />
-            <Row k="Correo" v={c.email} />
+            <Row k="Correo" v={c.email || '—'} />
             <Row k="Fecha de nacimiento" v={dateShort(c.birth_date)} />
             <Row k="Fecha de registro" v={dateShort(c.registered_at)} />
             <Row k="Dirección" v={c.address?.text || '—'} wide />
             <Row
-              k="Geolocalización"
+              k="Zona / geolocalización"
               wide
               v={
-                geo ? (
+                zone && geo ? (
                   <>
-                    {geo.lat}, {geo.lng}{' '}
+                    <span className="font-medium">{zone.name}</span>{' '}
+                    <span className="text-ink-soft">
+                      ({geo.lat}, {geo.lng})
+                    </span>{' '}
                     <a
                       className="underline hover:text-teal"
                       href={`https://www.openstreetmap.org/?mlat=${geo.lat}&mlon=${geo.lng}#map=15/${geo.lat}/${geo.lng}`}

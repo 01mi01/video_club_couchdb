@@ -20,6 +20,14 @@ import { money, dateShort, toDateInput, fromDateInput, COPY_STATUS_LABEL } from 
 
 const RETIRE_REASONS = ['no devuelto', 'robo', 'daño irreparable', 'pérdida', 'otro'];
 
+// "no devuelto" solo tiene sentido si la copia estaba efectivamente
+// prestada (no se le puede "no devolver" algo que nunca salió). Para
+// cualquier otro estado (disponible, o "missing" dándose de baja
+// definitiva) esa opción no aparece en la lista.
+function reasonsFor(status) {
+  return status === 'loaned' ? RETIRE_REASONS : RETIRE_REASONS.filter((r) => r !== 'no devuelto');
+}
+
 export default function VideoDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -31,6 +39,11 @@ export default function VideoDetailPage() {
   const [addForm, setAddForm] = useState({ count: 1, acquisition_date: toDateInput(new Date().toISOString()) });
   const [retire, setRetire] = useState(null); // copy object
   const [retireForm, setRetireForm] = useState({ reason: 'no devuelto', reasonOther: '', date: toDateInput(new Date().toISOString()) });
+  // Solo aplica cuando `retire.status === 'missing'`: la copia ya está "no
+  // disponible" (no devuelta/perdida/robada) y hay que decidir qué pasó
+  // con ella — un solo punto de entrada ("Dar de baja") con dos caminos
+  // posibles adentro, en vez de dos botones separados en la fila.
+  const [missingAction, setMissingAction] = useState('retire'); // 'retire' | 'recover'
   const [busy, setBusy] = useState(false);
   const [modalErr, setModalErr] = useState(null);
 
@@ -59,19 +72,25 @@ export default function VideoDetailPage() {
     }
   }
 
-  async function doRetire(e) {
+  // Envío del modal "Dar de baja" / "Cambiar estado". Para una copia
+  // "missing" con `missingAction === 'recover'` es en realidad una
+  // RECUPERACIÓN (vuelve a "available"), no una baja — mismo modal, mismo
+  // botón de confirmar, dos acciones de backend distintas según lo elegido.
+  async function submitCopyState(e) {
     e.preventDefault();
     setBusy(true);
     setModalErr(null);
-    const reason =
-      retireForm.reason === 'otro' ? retireForm.reasonOther.trim() : retireForm.reason;
+    const recovering = retire.status === 'missing' && missingAction === 'recover';
     try {
-      await API.retireCopy(id, retire.copy_id, { reason, date: fromDateInput(retireForm.date) });
+      if (recovering) {
+        await API.recoverCopy(id, retire.copy_id);
+        setBanner({ kind: 'success', msg: `Copia ${retire.copy_id} recuperada: vuelve a estar disponible.` });
+      } else {
+        const reason = retireForm.reason === 'otro' ? retireForm.reasonOther.trim() : retireForm.reason;
+        await API.retireCopy(id, retire.copy_id, { reason, date: fromDateInput(retireForm.date) });
+        setBanner({ kind: 'success', msg: `Copia ${retire.copy_id} dada de baja (${reason}).` });
+      }
       setRetire(null);
-      setBanner({
-        kind: 'success',
-        msg: `Copia ${retire.copy_id} dada de baja (${reason}).`,
-      });
       await reload();
     } catch (err) {
       setModalErr(err.message);
@@ -153,7 +172,12 @@ export default function VideoDetailPage() {
             <Line k="Copias totales" v={copies.length} />
             <Line k="Disponibles" v={disp} tone="teal" />
             <Line k="Prestadas" v={copies.filter((c) => c.status === 'loaned').length} tone="gold" />
-            <Line k="De baja" v={copies.filter((c) => c.status === 'retired').length} tone="rust" />
+            <Line
+              k="No disponible (recuperable)"
+              v={copies.filter((c) => c.status === 'missing').length}
+              tone="rust"
+            />
+            <Line k="De baja definitiva" v={copies.filter((c) => c.status === 'retired').length} />
           </div>
         </Card>
       </div>
@@ -169,7 +193,7 @@ export default function VideoDetailPage() {
                 <th>Copia</th>
                 <th>Estado</th>
                 <th>Adquirida</th>
-                <th>Baja</th>
+                <th>Motivo / fecha</th>
                 <th className="!text-right">Acciones</th>
               </tr>
             </thead>
@@ -187,33 +211,35 @@ export default function VideoDetailPage() {
                       : '—'}
                   </td>
                   <td className="text-right">
-                    {c.status !== 'retired' && (
-                      <Button
-                        size="sm"
-                        variant="danger"
-                        onClick={() => {
-                          setRetire(c);
-                          setRetireForm({
-                            reason: c.status === 'loaned' ? 'no devuelto' : 'robo',
-                            reasonOther: '',
-                            date: toDateInput(new Date().toISOString()),
-                          });
-                          setModalErr(null);
-                        }}
-                      >
-                        Dar de baja
-                      </Button>
-                    )}
+                    <div className="inline-flex items-center gap-1.5">
+                      {c.status !== 'retired' && (
+                        <Button
+                          size="sm"
+                          variant={c.status === 'missing' ? 'primary' : 'danger'}
+                          onClick={() => {
+                            setRetire(c);
+                            setRetireForm({
+                              reason: c.status === 'loaned' ? 'no devuelto' : 'robo',
+                              reasonOther: '',
+                              date: toDateInput(new Date().toISOString()),
+                            });
+                            // Una copia "missing" arranca en "recuperada" por
+                            // defecto (el caso más común: apareció) — se puede
+                            // cambiar a "baja definitiva" dentro del modal.
+                            setMissingAction('recover');
+                            setModalErr(null);
+                          }}
+                        >
+                          {c.status === 'missing' ? 'Cambiar estado' : 'Dar de baja'}
+                        </Button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-        <p className="mt-2 text-xs text-ink-soft">
-          Una copia prestada solo puede darse de baja con razón “no devuelto” (cierra también el
-          préstamo asociado). Para “robo” u otras razones, primero se registra la devolución.
-        </p>
       </Card>
 
       {/* Modal: registrar copias nuevas */}
@@ -253,58 +279,127 @@ export default function VideoDetailPage() {
         </form>
       </Modal>
 
-      {/* Modal: dar de baja copia */}
+      {/* Modal: dar de baja / cambiar estado de una copia.
+          Para "missing" es UN SOLO punto de entrada ("Cambiar estado") con
+          dos caminos posibles adentro: recuperarla (vuelve a "available") o
+          darla de baja definitiva ("retired", sin vuelta atrás). */}
       <Modal
         open={!!retire}
         onClose={() => setRetire(null)}
-        title={`Dar de baja la copia ${retire?.copy_id || ''}`}
+        title={
+          retire?.status === 'missing'
+            ? `Cambiar estado de la copia ${retire?.copy_id || ''}`
+            : `Dar de baja la copia ${retire?.copy_id || ''}`
+        }
         footer={
           <>
             <Button variant="ghost" onClick={() => setRetire(null)}>
               Cancelar
             </Button>
-            <Button form="retire-copy" type="submit" variant="danger" disabled={busy}>
-              {busy ? 'Procesando…' : 'Confirmar baja'}
+            <Button
+              form="retire-copy"
+              type="submit"
+              variant={retire?.status === 'missing' && missingAction === 'recover' ? 'primary' : 'danger'}
+              disabled={busy}
+            >
+              {busy
+                ? 'Procesando…'
+                : retire?.status === 'missing' && missingAction === 'recover'
+                  ? 'Confirmar recuperación'
+                  : retire?.status === 'missing'
+                    ? 'Confirmar baja definitiva'
+                    : 'Confirmar baja'}
             </Button>
           </>
         }
       >
-        <form id="retire-copy" onSubmit={doRetire} className="space-y-4">
+        <form id="retire-copy" onSubmit={submitCopyState} className="space-y-4">
           {modalErr && <Alert onClose={() => setModalErr(null)}>{modalErr}</Alert>}
+
           {retire?.status === 'loaned' && (
             <Alert kind="warn">
-              Esta copia está prestada. Solo se acepta la razón “no devuelto”, que además cierra el
-              préstamo asociado como no devuelto.
+              Esta copia está prestada: cualquier razón salvo “daño irreparable” (incluida “otro”)
+              se acepta directo, queda “No disponible” (recuperable, no definitiva) y cierra el
+              préstamo asociado. “Daño irreparable” es la única que exige registrar la devolución
+              antes.
             </Alert>
           )}
-          <Field label="Razón de la baja" required>
-            <Select
-              value={retireForm.reason}
-              onChange={(e) => setRetireForm({ ...retireForm, reason: e.target.value })}
-            >
-              {RETIRE_REASONS.map((r) => (
-                <option key={r} value={r}>
-                  {r}
-                </option>
-              ))}
-            </Select>
-          </Field>
-          {retireForm.reason === 'otro' && (
-            <Field label="Detalle de la razón" required>
-              <TextInput
-                value={retireForm.reasonOther}
-                onChange={(e) => setRetireForm({ ...retireForm, reasonOther: e.target.value })}
-                required
-              />
+
+          {retire?.status === 'available' && (
+            <Alert kind="warn">
+              Cualquier razón salvo “daño irreparable” (incluida “otro”) deja la copia “No
+              disponible” (recuperable: si aparece, se marca como recuperada). Solo “daño
+              irreparable” es DEFINITIVA, sin vuelta atrás.
+            </Alert>
+          )}
+
+          {retire?.status === 'missing' && (
+            <Field label="¿Qué pasó con esta copia?" required>
+              <div className="space-y-2 rounded-lg border border-ink-line p-3">
+                <label className="flex items-start gap-2 text-sm">
+                  <input
+                    type="radio"
+                    name="missingAction"
+                    className="mt-0.5 h-4 w-4 accent-teal"
+                    checked={missingAction === 'recover'}
+                    onChange={() => setMissingAction('recover')}
+                  />
+                  <span>
+                    <span className="font-medium">Apareció</span> — marcarla como recuperada, vuelve
+                    a estar disponible para prestar.
+                  </span>
+                </label>
+                <label className="flex items-start gap-2 text-sm">
+                  <input
+                    type="radio"
+                    name="missingAction"
+                    className="mt-0.5 h-4 w-4 accent-rust"
+                    checked={missingAction === 'retire'}
+                    onChange={() => setMissingAction('retire')}
+                  />
+                  <span>
+                    <span className="font-medium">No va a volver</span> — dar de baja definitiva
+                    (sin vuelta atrás).
+                  </span>
+                </label>
+              </div>
             </Field>
           )}
-          <Field label="Fecha de baja">
-            <TextInput
-              type="date"
-              value={retireForm.date}
-              onChange={(e) => setRetireForm({ ...retireForm, date: e.target.value })}
-            />
-          </Field>
+
+          {/* Razón / fecha: se piden salvo que sea una recuperación (ahí no
+              hace falta razón, la copia simplemente vuelve a estar disponible). */}
+          {!(retire?.status === 'missing' && missingAction === 'recover') && (
+            <>
+              <Field label="Razón de la baja" required>
+                <Select
+                  value={retireForm.reason}
+                  onChange={(e) => setRetireForm({ ...retireForm, reason: e.target.value })}
+                >
+                  {reasonsFor(retire?.status).map((r) => (
+                    <option key={r} value={r}>
+                      {r}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              {retireForm.reason === 'otro' && (
+                <Field label="Detalle de la razón" required>
+                  <TextInput
+                    value={retireForm.reasonOther}
+                    onChange={(e) => setRetireForm({ ...retireForm, reasonOther: e.target.value })}
+                    required
+                  />
+                </Field>
+              )}
+              <Field label="Fecha de baja">
+                <TextInput
+                  type="date"
+                  value={retireForm.date}
+                  onChange={(e) => setRetireForm({ ...retireForm, date: e.target.value })}
+                />
+              </Field>
+            </>
+          )}
         </form>
       </Modal>
     </div>

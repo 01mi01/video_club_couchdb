@@ -20,6 +20,8 @@ import { dateShort, money, daysOverdue, LOAN_STATUS_LABEL } from '../lib/format.
 const FILTERS = [
   { key: 'active', label: 'Activos' },
   { key: 'overdue', label: 'Vencidos' },
+  { key: 'unreturned', label: 'No devueltos' },
+  { key: 'returned', label: 'Devueltos' },
   { key: 'all', label: 'Todos' },
 ];
 
@@ -35,6 +37,8 @@ export default function LoansPage() {
     if (filter === 'active') f = list.filter((l) => l.status === 'active');
     else if (filter === 'overdue')
       f = list.filter((l) => l.status === 'active' && daysOverdue(l.due_date) > 0);
+    else if (filter === 'unreturned') f = list.filter((l) => l.status === 'unreturned');
+    else if (filter === 'returned') f = list.filter((l) => l.status === 'returned');
     return [...f].sort((a, b) => new Date(b.loan_date) - new Date(a.loan_date));
   }, [loans, filter]);
 
@@ -78,7 +82,7 @@ export default function LoansPage() {
                   <th>Vence</th>
                   <th>Total</th>
                   <th>Estado</th>
-                  <th className="!text-right">Acciones</th>
+                  <th className="!text-center">Acciones</th>
                 </tr>
               </thead>
               <tbody>
@@ -113,7 +117,7 @@ export default function LoansPage() {
                           {LOAN_STATUS_LABEL[l.status] || l.status}
                         </Badge>
                       </td>
-                      <td className="text-right">
+                      <td className="text-center">
                         <IconButton label="Ver préstamo" onClick={() => navigate(`/prestamos/${l._id}`)}>
                           <IconEye />
                         </IconButton>

@@ -46,7 +46,21 @@ const clientService = require('./clientService');
 const pricing = require('./pricing');
 const repo = require('../repositories/couchRepository');
 const { withConflictRetry } = require('../utils/conflictRetry');
+const { foldForSearch } = require('../utils/textFold');
 const { badRequest, notFound, conflict } = require('../utils/errors');
+
+// "no devuelto" (a secas, sin mencionar robo/pérdida/hurto) SOLO tiene
+// sentido una vez que la fecha de devolución pactada YA PASÓ — es
+// literalmente "no lo devolvió [para cuando debía]". Antes de esa fecha no
+// hay nada que constatar todavía (el préstamo sigue vigente). "robo" y
+// "pérdida" SÍ pueden reportarse en cualquier momento (le pueden robar o
+// perder la copia el mismo día que la lleva, mucho antes de la fecha
+// pactada) — por eso NO se bloquean acá, solo el caso "no devuelto" puro.
+// Palabras equivalentes a las que reconoce `videoService.PERMANENT_REASON`
+// (en sentido inverso: acá se buscan las NO permanentes), separadas en dos
+// grupos para poder distinguir "no devuelto puro" de "robo/pérdida".
+const PLAIN_NO_RETURN = /no\s*devuelt|not\s*returned|sin\s*devoluci|no\s*devoluci/i;
+const THEFT_OR_LOSS = /perdid|extravi|lost|rob|hurt/i;
 
 /* ---------------------------------------------------------------------------
  * Resolución de plazo (days <-> due_date)
@@ -336,6 +350,14 @@ async function quoteLoan(body) {
  * Libera las copias, recalcula el importe según la fecha REAL de
  * devolución y actualiza la factura. También multi-documento -> _bulk_docs
  * con la misma estrategia compensable.
+ *
+ * TAMBIÉN acepta préstamos "unreturned" (cerrados antes por no devolución/
+ * pérdida/robo — ver `writeOffUnreturned`): si la copia finalmente aparece,
+ * esto es lo que reabre el préstamo como "returned" de verdad, recalculando
+ * el importe según cuánto tardó en volver de verdad. Sin esto, una copia
+ * "missing" se podía recuperar a nivel VIDEO (`recoverCopy`, vuelve a
+ * "available") pero el PRÉSTAMO se quedaba "unreturned" para siempre — un
+ * préstamo cerrado no puede "arreglarse solo" con el estado de la copia.
  * ======================================================================== */
 async function returnLoan(loanId, body) {
   const returnDate = body.return_date || new Date().toISOString();
@@ -343,11 +365,13 @@ async function returnLoan(loanId, body) {
   return withConflictRetry(
     async () => {
       const loan = await loanRepo.getLoan(loanId);
-      if (loan.status !== 'active') {
-        // "returned" (ya devuelto) o "unreturned" (cerrado por no
-        // devolución). En ambos casos el préstamo ya no está abierto.
+      // "active" (nunca se dio de baja) o "unreturned" (se había marcado no
+      // devuelta/perdida/robada y ahora apareció) son los dos puntos de
+      // partida válidos. "returned" (ya devuelto) es el único terminal real.
+      if (loan.status !== 'active' && loan.status !== 'unreturned') {
         throw conflict(`Este préstamo ya está cerrado (status "${loan.status}").`);
       }
+      const reopeningFromUnreturned = loan.status === 'unreturned';
       // Se rechaza solo si la devolución cae en un día ANTERIOR al del
       // préstamo. Devolver el MISMO día es válido y se factura como 1 día.
       if (pricing.calendarDayIndex(returnDate) < pricing.calendarDayIndex(loan.loan_date)) {
@@ -385,8 +409,13 @@ async function returnLoan(loanId, body) {
       for (const [videoId, copyIds] of touched) {
         const v = await videoRepo.getById(videoId);
         for (const c of v.copies) {
-          if (copyIds.has(c.copy_id) && c.status === 'loaned') {
+          // "loaned" (caso normal) o "missing" (préstamo reabierto desde
+          // "unreturned": la copia apareció) -> las dos liberan a
+          // "available". Una copia ya "retired" (baja definitiva
+          // confirmada aparte) NO se toca — esa sí es terminal de verdad.
+          if (copyIds.has(c.copy_id) && (c.status === 'loaned' || c.status === 'missing')) {
             c.status = 'available';
+            c.retirement = null; // ya no aplica: la copia volvió de verdad
           }
         }
         v.__touchedCopies = [...copyIds];
@@ -402,6 +431,11 @@ async function returnLoan(loanId, body) {
         returned_late: late,
         pricing_original: loan.pricing_original || loan.pricing,
         pricing: breakdown,
+        // Si venía de "unreturned", se deja constancia de que se reabrió
+        // (la copia apareció) — `closure`/`closed_at` NO se borran: quedan
+        // como historial de que en su momento sí se había cerrado por no
+        // devolución/pérdida/robo.
+        ...(reopeningFromUnreturned ? { reopened_at: now, reopened_from: 'unreturned' } : {}),
         updated_at: now,
       };
 
@@ -412,7 +446,12 @@ async function returnLoan(loanId, body) {
       // de la tabla sino la del día máximo configurado, cobrada por CADA
       // día real -- ver `pricing.quoteReturn`.
       let note = null;
-      if (breakdown.overdue) {
+      if (reopeningFromUnreturned) {
+        note =
+          `Préstamo reabierto: estaba cerrado por no devolución/pérdida/robo (${loan.closure?.reason || 'no devuelto'}, ${loan.closed_at}) ` +
+          `y la copia apareció. Devuelta el ${returnDate} (${actualDays} día(s) reales vs ${loan.days} pactados). ` +
+          `Importe recalculado según la fecha real de devolución.`;
+      } else if (breakdown.overdue) {
         note =
           `Devolución tardía: ${actualDays} día(s) reales vs ${loan.days} pactados. ` +
           `Días 1-${breakdown.max_days} a tarifa normal, días ${breakdown.max_days + 1}-${actualDays} ` +
@@ -473,15 +512,31 @@ async function returnLoan(loanId, body) {
  * Un préstamo vencido queda EXACTAMENTE igual ("active", copia "loaned")
  * hasta que el propietario decide una de dos cosas:
  *   (a) que la copia volvió tarde  -> `returnLoan` (calcula recargo/nota).
- *   (b) que la copia NO va a volver -> esta función.
+ *   (b) que la copia NO va a volver (por ahora) -> esta función.
+ *
+ * CORRECCIÓN (detectada por el propietario al revisar la app): esta salida
+ * NO significa "la copia desapareció para siempre" — "no devuelto",
+ * "pérdida" y "robo" son situaciones que TODAVÍA pueden resolverse (el
+ * cliente aparece, la policía recupera la copia, etc.), a diferencia de un
+ * "daño irreparable" real. Por eso la copia queda en estado "missing"
+ * (NO "retired"): sigue fuera de circulación, pero es reversible — ver
+ * `videoService.recoverCopy` (vuelve a "available") y `videoService.retireCopy`
+ * sobre una copia "missing" (baja DEFINITIVA, si el propietario decide que
+ * ya no vale la pena esperarla).
  *
  * Esta función, en UNA sola operación `_bulk_docs` (video[s] + préstamo +
  * factura), con la misma estrategia compensable que la devolución:
- *   - da de baja cada copia del préstamo que siga "loaned"
+ *   - marca "missing" cada copia del préstamo que siga "loaned"
  *     (`retirement.reason` = razón indicada, por defecto "no devuelto"),
- *   - cierra el préstamo con status "unreturned" (estado terminal
- *     distinto de "returned": la copia NO regresó; `return_date` = null),
- *   - anota la factura. El importe pactado NO se modifica: se debe igual.
+ *   - cierra el préstamo con status "unreturned" (estado terminal para el
+ *     PRÉSTAMO — la renta ya ocurrió y se debe igual — distinto de
+ *     "returned"; `return_date` = null). El estado terminal del préstamo
+ *     NO ata a la copia: la copia puede recuperarse después sin reabrir
+ *     el préstamo, que queda como registro histórico de que no volvió a
+ *     tiempo por esa vía.
+ *   - anota la factura. NO SE EMITE una factura nueva ni se cobra de más
+ *     por esto: el importe pactado (la renta que ya se debía) NO se
+ *     modifica, solo se dejó constancia en `note`.
  * ======================================================================== */
 async function writeOffUnreturned(loanId, body = {}) {
   const reason = (body.reason || 'no devuelto').trim() || 'no devuelto';
@@ -496,6 +551,23 @@ async function writeOffUnreturned(loanId, body = {}) {
         );
       }
 
+      // CORRECCIÓN (detectada por el propietario al revisar la app): esta
+      // salida no validaba que el préstamo ya hubiera vencido, así que se
+      // podía marcar "no devuelto" segundos después de haberlo registrado
+      // — un sistema real no puede saber que algo "no se devolvió" antes
+      // de que llegue la fecha en que debía devolverse. "robo"/"pérdida"
+      // quedan exceptuados: esos SÍ pueden pasar (y reportarse) en
+      // cualquier momento del préstamo, no solo después del vencimiento.
+      const folded = foldForSearch(reason);
+      const isPlainNoReturn = PLAIN_NO_RETURN.test(folded) && !THEFT_OR_LOSS.test(folded);
+      if (isPlainNoReturn && new Date(date).getTime() < new Date(loan.due_date).getTime()) {
+        throw badRequest(
+          `Este préstamo todavía no vence (vence el ${loan.due_date}). No se puede marcar "no ` +
+            `devuelto" antes de la fecha de vencimiento. Si la copia se perdió o la robaron, usa ` +
+            `esa razón en su lugar — eso sí se puede reportar en cualquier momento.`
+        );
+      }
+
       // Agrupar copias del préstamo por video.
       const touched = new Map(); // videoId -> Set(copyId)
       for (const it of loan.items) {
@@ -505,16 +577,17 @@ async function writeOffUnreturned(loanId, body = {}) {
 
       const now = new Date().toISOString();
       const videoDocsToSave = [];
-      const retiredCopies = [];
+      const missingCopies = [];
       for (const [videoId, copyIds] of touched) {
         const v = await videoRepo.getById(videoId);
         for (const c of v.copies) {
-          // `!== 'retired'` (en vez de `=== 'loaned'`) para que un reintento
-          // tras un fallo parcial + compensación converja igual.
-          if (copyIds.has(c.copy_id) && c.status !== 'retired') {
-            c.status = 'retired';
+          // `!== 'missing' && !== 'retired'` (en vez de `=== 'loaned'`) para
+          // que un reintento tras un fallo parcial + compensación converja
+          // igual sin duplicar el efecto.
+          if (copyIds.has(c.copy_id) && c.status !== 'missing' && c.status !== 'retired') {
+            c.status = 'missing'; // NO terminal: ver comentario arriba.
             c.retirement = { date, reason, loan_id: loan._id };
-            retiredCopies.push({ video_id: videoId, copy_id: c.copy_id });
+            missingCopies.push({ video_id: videoId, copy_id: c.copy_id });
           }
         }
         v.updated_at = now;
@@ -527,17 +600,19 @@ async function writeOffUnreturned(loanId, body = {}) {
         status: 'unreturned',
         return_date: null, // nunca se devolvió
         closed_at: now,
-        closure: { kind: 'unreturned', reason, date, copies: retiredCopies },
+        closure: { kind: 'unreturned', reason, date, copies: missingCopies },
         updated_at: now,
       };
 
       const invoice = await loanRepo.getInvoice(loan.invoice_id);
-      const retiredList = retiredCopies.map((c) => c.copy_id).join(', ') || '(ninguna seguía prestada)';
+      const missingList = missingCopies.map((c) => c.copy_id).join(', ') || '(ninguna seguía prestada)';
       const updatedInvoice = {
         ...invoice,
+        // NO se emite una factura nueva ni se cobra de más: se anota la
+        // existente. El importe pactado sigue siendo el que se debe.
         note:
           `Préstamo cerrado por NO DEVOLUCIÓN (${date}). ` +
-          `Copia(s) dada(s) de baja: ${retiredList}. ` +
+          `Copia(s) marcada(s) como no disponible (recuperable): ${missingList}. ` +
           `El importe pactado (${invoice.total} ${invoice.currency}) se mantiene.`,
         updated_at: now,
       };
@@ -564,7 +639,7 @@ async function writeOffUnreturned(loanId, body = {}) {
       return {
         loan: { ...updatedLoan, _rev: revById[updatedLoan._id] },
         invoice: { ...updatedInvoice, _rev: revById[updatedInvoice._id] },
-        retired_copies: retiredCopies,
+        missing_copies: missingCopies,
       };
     },
     { label: 'baja por no devolución', retries: 4 }

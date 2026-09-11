@@ -36,3 +36,8 @@ exports.addCopies = async (req, res) => {
 exports.retireCopy = async (req, res) => {
   res.json(await videoService.retireCopy(req.params.id, req.params.copyId, req.body || {}));
 };
+
+// Recuperar una copia "missing" (no devuelta/perdida/robada) que apareció.
+exports.recoverCopy = async (req, res) => {
+  res.json(await videoService.recoverCopy(req.params.id, req.params.copyId));
+};

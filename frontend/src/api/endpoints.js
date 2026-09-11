@@ -46,6 +46,8 @@ export const searchVideos = (params) => data(api.get('/videos/search', { params 
 export const addCopies = (id, body) => data(api.post(`/videos/${id}/copies`, body));
 export const retireCopy = (id, copyId, body) =>
   data(api.post(`/videos/${id}/copies/${copyId}/retire`, body));
+// Recuperar una copia "missing" (no devuelta/perdida/robada) que apareció.
+export const recoverCopy = (id, copyId) => data(api.post(`/videos/${id}/copies/${copyId}/recover`));
 
 // --- Zonas (geolocalización preconfigurada; mismo patrón que género) ---
 // El cliente referencia una zona por id (address.zone_id) en vez de que el

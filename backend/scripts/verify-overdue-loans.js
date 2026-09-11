@@ -13,10 +13,13 @@
  *      préstamo, marca `returned_late`, y la factura deja constancia del
  *      atraso. La copia vuelve a "available".
  *   3. Salida manual (b): BAJA POR NO DEVOLUCIÓN -> el endpoint de baja de
- *      copias con razón "no devuelto" (o `POST /api/loans/:id/write-off`)
- *      deja la copia "retired" y cierra el préstamo como "unreturned".
- *   4. Protección: una copia PRESTADA no se puede dar de baja por "robo"
- *      (hay que devolverla primero).
+ *      copias con razón "no devuelto"/"pérdida"/"robo" (o
+ *      `POST /api/loans/:id/write-off`) deja la copia "missing" (NO
+ *      "retired": es recuperable, ver `videoService.recoverCopy`) y cierra
+ *      el préstamo como "unreturned".
+ *   4. Protección: una copia PRESTADA NO se puede dar de baja por una razón
+ *      que implique que ya volvió físicamente (ej. "daño irreparable") sin
+ *      antes registrar su devolución.
  *
  * DATOS: 100% descartables, creados y borrados por el propio script
  * (género/película/cliente marcados `TEST_DELETE_ME_...`). Limpieza total
@@ -165,7 +168,7 @@ async function main() {
 
     const v = await rawGet(video._id);
     const c3 = v.copies.find((c) => c.copy_id === 'c3');
-    assert(c3.status === 'retired', `c3 quedó "${c3.status}", esperado "retired"`);
+    assert(c3.status === 'missing', `c3 quedó "${c3.status}", esperado "missing" (recuperable, NO "retired")`);
     assert(c3.retirement && /no devuelto/i.test(c3.retirement.reason), 'no se registró la razón "no devuelto"');
     assert(c3.retirement.date, 'no se registró la fecha de baja');
 
@@ -177,13 +180,23 @@ async function main() {
     const facturaDb = await rawGet(loan.invoice_id);
     assert(facturaDb && /no devoluci[oó]n/i.test(facturaDb.note || ''),
       `la factura no refleja la no devolución (note: "${facturaDb && facturaDb.note}")`);
+    assert(facturaDb.total === loan.pricing.total_amount, 'el importe de la factura NO debería cambiar por el write-off');
 
-    record(3, 'Salida manual (b): baja por "no devuelto" vía endpoint de baja de copias', true,
-      `retireCopy(c3, "no devuelto") -> copia "retired" (razón "${c3.retirement.reason}", ${c3.retirement.date}).\n` +
+    // Recuperable: se puede marcar como recuperada y vuelve a "available".
+    await videoService.recoverCopy(video._id, 'c3');
+    const c3rec = (await rawGet(video._id)).copies.find((c) => c.copy_id === 'c3');
+    assert(c3rec.status === 'available', `recoverCopy no la dejó "available" (quedó "${c3rec.status}")`);
+    assert(c3rec.retirement === null, 'recoverCopy no limpió `retirement`');
+    const loanDbTrasRecuperar = await rawGet(loan._id);
+    assert(loanDbTrasRecuperar.status === 'unreturned', 'el préstamo NO debe reabrirse al recuperar la copia (queda como registro histórico)');
+
+    record(3, 'Salida manual (b): baja por "no devuelto" (missing, recuperable) vía endpoint de baja de copias', true,
+      `retireCopy(c3, "no devuelto") -> copia "missing" (razón "${c3.retirement.reason}", ${c3.retirement.date}).\n` +
         `Préstamo asociado cerrado como "unreturned" (return_date = null, closed_at = ${loanDb.closed_at}).\n` +
-        `Factura nota: "${facturaDb.note}"  (importe pactado ${facturaDb.total} Bs se mantiene).`);
+        `Factura nota: "${facturaDb.note}"  (importe pactado ${facturaDb.total} Bs se mantiene, SIN factura nueva).\n` +
+        `recoverCopy(c3) -> vuelve a "available"; el préstamo sigue "unreturned" (no se reabre).`);
   } catch (e) {
-    record(3, 'Salida manual (b): baja por "no devuelto" vía endpoint de baja de copias', false, `PROBLEMA: ${e.message}`);
+    record(3, 'Salida manual (b): baja por "no devuelto" (missing, recuperable) vía endpoint de baja de copias', false, `PROBLEMA: ${e.message}`);
   }
 
   // 3.2 vía endpoint DIRECTO del préstamo (loanService.writeOffUnreturned)
@@ -193,43 +206,53 @@ async function main() {
 
     const v = await rawGet(video._id);
     const c4 = v.copies.find((c) => c.copy_id === 'c4');
-    assert(c4.status === 'retired', `c4 quedó "${c4.status}", esperado "retired"`);
+    assert(c4.status === 'missing', `c4 quedó "${c4.status}", esperado "missing"`);
     const loanDb = await rawGet(loan._id);
     assert(loanDb.status === 'unreturned', `el préstamo quedó "${loanDb.status}", esperado "unreturned"`);
-    assert(Array.isArray(w.retired_copies) && w.retired_copies.some((c) => c.copy_id === 'c4'),
-      'la respuesta no lista c4 entre las copias dadas de baja');
+    assert(Array.isArray(w.missing_copies) && w.missing_copies.some((c) => c.copy_id === 'c4'),
+      'la respuesta no lista c4 entre las copias marcadas como no disponibles');
 
-    record(4, 'Salida manual (b) vía POST /api/loans/:id/write-off', true,
-      `writeOffUnreturned -> c4 "retired", préstamo "unreturned". Copias dadas de baja: ` +
-        `${w.retired_copies.map((c) => c.copy_id).join(', ')}.`);
+    // Baja DEFINITIVA desde "missing": el propietario decide que ya no vale
+    // la pena esperarla -> ahora sí "retired", sin vuelta atrás.
+    await videoService.retireCopy(video._id, 'c4', { reason: 'se da por perdida definitivamente' });
+    const c4ret = (await rawGet(video._id)).copies.find((c) => c.copy_id === 'c4');
+    assert(c4ret.status === 'retired', `baja definitiva no dejó "retired" (quedó "${c4ret.status}")`);
+
+    record(4, 'Salida manual (b) vía POST /api/loans/:id/write-off + baja definitiva posterior', true,
+      `writeOffUnreturned -> c4 "missing", préstamo "unreturned". Copias marcadas: ` +
+        `${w.missing_copies.map((c) => c.copy_id).join(', ')}.\n` +
+        `retireCopy(c4, ...) sobre copia "missing" -> "retired" (definitiva, ya no se puede recuperar).`);
   } catch (e) {
-    record(4, 'Salida manual (b) vía POST /api/loans/:id/write-off', false, `PROBLEMA: ${e.message}`);
+    record(4, 'Salida manual (b) vía POST /api/loans/:id/write-off + baja definitiva posterior', false, `PROBLEMA: ${e.message}`);
   }
 
   /* =====================================================================
-   * 5) PROTECCIÓN: "robo" sobre copia prestada -> rechazado
+   * 5) PROTECCIÓN: "daño irreparable" sobre copia prestada -> rechazado
+   *    (a diferencia de "robo"/"pérdida"/"no devuelto", que SÍ se aceptan
+   *    directamente sobre una copia prestada — ver pasos 3 y 3.2 arriba)
    * ==================================================================== */
   try {
-    // c1 sigue prestada (del test 1). Intentar baja por "robo" debe fallar.
+    // c1 sigue prestada (del test 1). Intentar baja por "daño irreparable"
+    // debe fallar: esa razón supone que la copia ya volvió físicamente.
     let rechazado = false;
     let msg = '';
     try {
-      await videoService.retireCopy(video._id, 'c1', { reason: 'robo' });
+      await videoService.retireCopy(video._id, 'c1', { reason: 'daño irreparable' });
     } catch (err) {
       rechazado = true;
       msg = err.message;
     }
-    assert(rechazado, 'PROBLEMA: se permitió dar de baja por "robo" una copia que está prestada');
+    assert(rechazado, 'PROBLEMA: se permitió dar de baja por "daño irreparable" una copia que está prestada');
     assert(/prestada|devoluci[oó]n/i.test(msg), `mensaje de rechazo inesperado: "${msg}"`);
 
     const c1 = (await rawGet(video._id)).copies.find((c) => c.copy_id === 'c1');
     assert(c1.status === 'loaned', 'la copia c1 cambió de estado pese al rechazo');
 
-    record(5, 'Protección: "robo" sobre copia prestada se rechaza', true,
-      `retireCopy(c1, "robo") con c1 prestada -> RECHAZADO: "${msg}"\n` +
-        `c1 sigue "loaned". (Para "robo" hay que registrar antes la devolución.)`);
+    record(5, 'Protección: "daño irreparable" sobre copia prestada se rechaza', true,
+      `retireCopy(c1, "daño irreparable") con c1 prestada -> RECHAZADO: "${msg}"\n` +
+        `c1 sigue "loaned". ("robo"/"pérdida"/"no devuelto" SÍ se aceptan directo — ver pasos 3 y 3.2.)`);
   } catch (e) {
-    record(5, 'Protección: "robo" sobre copia prestada se rechaza', false, `PROBLEMA: ${e.message}`);
+    record(5, 'Protección: "daño irreparable" sobre copia prestada se rechaza', false, `PROBLEMA: ${e.message}`);
   }
 
   await limpiar();

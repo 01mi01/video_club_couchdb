@@ -195,14 +195,6 @@ export default function ConfigPage() {
               {pricingMeta.persisted ? 'Personalizado' : 'Valores por defecto'}
             </Badge>
           </div>
-          <p className="mb-4 text-sm text-ink-soft">
-            Es el precio TOTAL por película para ese plazo (no "por día" acumulado). El día más
-            largo de la lista es el máximo permitido: hoy es{' '}
-            <strong className="text-ink">{prices.length} día(s)</strong>. Si un cliente quiere
-            llevar una película por más días de los que hay aquí, el sistema rechaza el préstamo
-            automáticamente al registrarlo.
-          </p>
-
           {pricingMsg && (
             <div className="mb-3">
               <Alert kind={pricingMsg.kind} onClose={() => setPricingMsg(null)}>
@@ -245,10 +237,6 @@ export default function ConfigPage() {
               − Quitar el último día
             </Button>
           </div>
-          <p className="mt-1.5 text-xs text-ink-soft">
-            "Agregar un día más" sube el máximo permitido en uno; "quitar el último día" lo baja
-            (los préstamos ya registrados con ese plazo no se ven afectados).
-          </p>
 
           <Button className="mt-4" onClick={savePricing} disabled={savingP}>
             {savingP ? 'Guardando…' : 'Guardar precios'}
@@ -263,11 +251,6 @@ export default function ConfigPage() {
               {discMeta.persisted ? 'Personalizado' : 'Valores por defecto'}
             </Badge>
           </div>
-          <p className="mb-4 text-sm text-ink-soft">
-            Un tramo dice: "si el cliente lleva ENTRE tantas Y tantas películas en el mismo
-            préstamo, aplica tal % de descuento sobre el total". Puede haber varios tramos.
-          </p>
-
           {discMsg && (
             <div className="mb-3">
               <Alert kind={discMsg.kind} onClose={() => setDiscMsg(null)}>
@@ -337,12 +320,6 @@ export default function ConfigPage() {
                     </Button>
                   </div>
                 </div>
-                {t.no_cap && (
-                  <p className="mt-2 text-xs text-ink-soft">
-                    Sin límite superior significa "{t.min_qty || '?'} películas o más" — útil para
-                    el último tramo (ej. "más de 5 películas").
-                  </p>
-                )}
               </div>
             ))}
           </div>
@@ -358,11 +335,7 @@ export default function ConfigPage() {
       </div>
 
       <Card className="mt-4" accent={false}>
-        <h2 className="text-lg font-semibold">Vista previa de la tabla vigente</h2>
-        <p className="mb-3 text-xs text-ink-soft">
-          Esto es lo que un préstamo nuevo va a cobrar HOY, según lo guardado (no según cambios sin
-          guardar que aún estén en edición arriba).
-        </p>
+        <h2 className="mb-3 text-lg font-semibold">Vista previa de la tabla vigente</h2>
         <div className="grid gap-6 sm:grid-cols-2">
           <div>
             <p className="eyebrow">Precios</p>

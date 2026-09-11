@@ -59,9 +59,21 @@
  *     // un JOIN que CouchDB no hace bien.
  *     copies: [
  *       { copy_id: "c1", acquisition_date: "ISO",
- *         status: "available" | "loaned" | "retired",
- *         retirement: null | { date: "ISO", reason: "no devuelto" | "robo" | ... } }
+ *         status: "available" | "loaned" | "missing" | "retired",
+ *         retirement: null | { date: "ISO", reason: "no devuelto" | "robo" | ...,
+ *                               loan_id?: "loan:<uuid>" } }
  *     ],
+ *     // ESTADOS DE COPIA (ver videoService.retireCopy / recoverCopy):
+ *     //   available -> en tienda, se puede prestar.
+ *     //   loaned    -> con un cliente en este momento.
+ *     //   missing   -> NO se devolvió a tiempo (razón "no devuelto",
+ *     //     "pérdida" o "robo" mientras estaba prestada). NO ES TERMINAL:
+ *     //     la copia puede aparecer más adelante -> se puede RECUPERAR
+ *     //     (vuelve a "available") o darse de baja definitiva ("retired")
+ *     //     si el propietario decide que ya no vale la pena esperarla.
+ *     //   retired   -> baja DEFINITIVA, sin vuelta atrás (ej. "daño
+ *     //     irreparable" tras devolverse, o una copia "missing" que el
+ *     //     propietario decide dar por perdida para siempre).
  *
  *     created_at, updated_at
  *   }

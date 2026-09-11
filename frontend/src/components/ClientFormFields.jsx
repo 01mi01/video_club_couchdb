@@ -136,10 +136,7 @@ export default function ClientFormFields({ form, set, isEdit, zones, compact = f
 
       <Wrap {...wrapProps}>
         {!compact && <h2 className="mb-4 text-xl font-semibold">Dirección y geolocalización</h2>}
-        <Field
-          label="Zona"
-          hint="Geolocalización preconfigurada — reemplaza teclear lat/lng a mano. Administrar en “Zonas”."
-        >
+        <Field label="Zona">
           <Select value={form.zone_id} onChange={(e) => set({ zone_id: e.target.value })}>
             <option value="">Sin zona</option>
             {[...zones]
@@ -162,11 +159,7 @@ export default function ClientFormFields({ form, set, isEdit, zones, compact = f
           </p>
         )}
         <div className="mt-4">
-          <Field
-            label="Dirección (calle y número)"
-            required
-            hint="Solo la calle/número — la zona elegida arriba ya se agrega sola, no hace falta repetirla."
-          >
+          <Field label="Dirección (calle y número)" required>
             <TextInput
               value={form.addr_text}
               onChange={(e) => set({ addr_text: e.target.value })}

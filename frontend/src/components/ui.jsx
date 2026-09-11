@@ -235,5 +235,10 @@ export function loanStatusTone(status) {
   return status === 'active' ? 'teal' : status === 'returned' ? 'soft' : 'rust';
 }
 export function copyStatusTone(status) {
-  return status === 'available' ? 'teal' : status === 'loaned' ? 'gold' : 'rust';
+  // "missing" (no devuelta/perdida/robada, recuperable) se distingue de
+  // "retired" (baja definitiva): rust = necesita atención, soft = archivada.
+  if (status === 'available') return 'teal';
+  if (status === 'loaned') return 'gold';
+  if (status === 'missing') return 'rust';
+  return 'soft'; // retired
 }

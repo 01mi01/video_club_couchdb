@@ -103,12 +103,6 @@ export default function ZonesPage() {
     <div>
       <PageHeader title="Zonas" actions={<Button onClick={openNew}>Nueva zona</Button>} />
 
-      <p className="mb-4 max-w-2xl text-sm text-ink-soft">
-        Geolocalización preconfigurada de la dirección del cliente: cada zona guarda un nombre y
-        coordenadas fijas. Al registrar o editar un cliente, el empleado elige una zona de la
-        lista en vez de teclear latitud/longitud exactas a mano.
-      </p>
-
       {banner && (
         <div className="mb-4">
           <Alert kind={banner.kind} onClose={() => setBanner(null)}>

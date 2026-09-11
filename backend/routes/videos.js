@@ -15,5 +15,6 @@ router.put('/:id', asyncHandler(c.update)); //    PUT  /api/videos/:id        (m
 // Copias
 router.post('/:id/copies', asyncHandler(c.addCopies)); //                       POST /api/videos/:id/copies         (registrar nuevas copias)
 router.post('/:id/copies/:copyId/retire', asyncHandler(c.retireCopy)); //       POST /api/videos/:id/copies/:copyId/retire  (baja: fecha + razón)
+router.post('/:id/copies/:copyId/recover', asyncHandler(c.recoverCopy)); //     POST /api/videos/:id/copies/:copyId/recover (copia "missing" -> "available")
 
 module.exports = router;

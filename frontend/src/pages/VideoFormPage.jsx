@@ -283,10 +283,6 @@ export default function VideoFormPage() {
 
         <Card>
           <h2 className="mb-4 text-xl font-semibold">Premios Oscar</h2>
-          <p className="mb-3 text-xs text-ink-soft">
-            Categorías normalizadas (ver "Categorías Oscar" en el menú) — permite buscar
-            préstamos por nominación tanto en español como en inglés.
-          </p>
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <span className="label">Nominaciones</span>
@@ -346,7 +342,7 @@ export default function VideoFormPage() {
           <Card>
             <h2 className="mb-4 text-xl font-semibold">Adquisición inicial</h2>
             <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Unidades adquiridas" required hint="Se crean tantas copias como unidades">
+              <Field label="Unidades adquiridas" required>
                 <TextInput
                   type="number"
                   min="1"

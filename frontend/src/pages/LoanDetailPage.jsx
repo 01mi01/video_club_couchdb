@@ -100,30 +100,30 @@ export default function LoanDetailPage() {
             <Button variant="ghost" className="no-print" onClick={() => navigate('/prestamos')}>
               Volver
             </Button>
+            {(loan.status === 'active' || loan.status === 'unreturned') && (
+              <Button
+                className="no-print"
+                onClick={() => {
+                  setAction('return');
+                  setModalErr(null);
+                  setReturnDate(toDateInput(new Date().toISOString()));
+                }}
+              >
+                {loan.status === 'unreturned' ? 'Marcar como devuelto (apareció)' : 'Registrar devolución'}
+              </Button>
+            )}
             {loan.status === 'active' && (
-              <>
-                <Button
-                  className="no-print"
-                  onClick={() => {
-                    setAction('return');
-                    setModalErr(null);
-                    setReturnDate(toDateInput(new Date().toISOString()));
-                  }}
-                >
-                  Registrar devolución
-                </Button>
-                <Button
-                  variant="danger"
-                  className="no-print"
-                  onClick={() => {
-                    setAction('writeoff');
-                    setModalErr(null);
-                    setReason('no devuelto');
-                  }}
-                >
-                  Baja por no devolución
-                </Button>
-              </>
+              <Button
+                variant="danger"
+                className="no-print"
+                onClick={() => {
+                  setAction('writeoff');
+                  setModalErr(null);
+                  setReason('no devuelto');
+                }}
+              >
+                Baja por no devolución
+              </Button>
             )}
           </>
         }
@@ -216,7 +216,7 @@ export default function LoanDetailPage() {
       <Modal
         open={action === 'return'}
         onClose={() => setAction(null)}
-        title="Registrar devolución"
+        title={loan.status === 'unreturned' ? 'Marcar como devuelto' : 'Registrar devolución'}
         footer={
           <>
             <Button variant="ghost" onClick={() => setAction(null)}>
@@ -230,10 +230,18 @@ export default function LoanDetailPage() {
       >
         <form id="return-form" onSubmit={doReturn} className="space-y-4">
           {modalErr && <Alert onClose={() => setModalErr(null)}>{modalErr}</Alert>}
-          <p className="text-sm text-ink-soft">
-            El importe se recalcula según la fecha real de devolución. Si supera los días pactados,
-            la factura deja constancia del atraso.
-          </p>
+          {loan.status === 'unreturned' ? (
+            <Alert kind="warn">
+              Este préstamo estaba cerrado por no devolución/pérdida/robo. Al confirmar, la copia
+              vuelve a estar disponible y el préstamo se reabre como “Devuelto”, recalculando el
+              importe según cuánto tardó en volver de verdad.
+            </Alert>
+          ) : (
+            <p className="text-sm text-ink-soft">
+              El importe se recalcula según la fecha real de devolución. Si supera los días pactados,
+              la factura deja constancia del atraso.
+            </p>
+          )}
           <Field label="Fecha de devolución">
             <TextInput
               type="date"
@@ -263,9 +271,16 @@ export default function LoanDetailPage() {
         <form id="writeoff-form" onSubmit={doWriteOff} className="space-y-4">
           {modalErr && <Alert onClose={() => setModalErr(null)}>{modalErr}</Alert>}
           <Alert kind="warn">
-            Esto da de baja permanentemente la(s) copia(s) de este préstamo y lo cierra como “no
-            devuelto”. El importe pactado se mantiene.
+            Esto marca la(s) copia(s) de este préstamo como “no disponible” (recuperable si
+            aparece) y cierra el préstamo. El importe pactado se mantiene.
           </Alert>
+          {!over && (
+            <Alert kind="warn">
+              Este préstamo todavía no vence ({dateShort(loan.due_date)}). “No devuelto” recién se
+              puede usar después del vencimiento — si la copia se perdió o la robaron, escribe esa
+              razón en su lugar: eso sí se puede reportar en cualquier momento.
+            </Alert>
+          )}
           <Field label="Razón" required>
             <TextInput value={reason} onChange={(e) => setReason(e.target.value)} required />
           </Field>

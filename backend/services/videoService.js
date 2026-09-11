@@ -326,35 +326,78 @@ async function addCopies(id, body) {
 /**
  * 3. Registrar la BAJA de una copia (fecha + razón).
  *
- * Casos (el enunciado exige explícitamente la razón "no devuelto"):
+ * Casos (el enunciado exige explícitamente la razón "no devuelto"). La
+ * pregunta que decide todo es: "¿esta copia TODAVÍA puede aparecer?" — NO
+ * de qué estado partía (disponible o prestada):
  *
- *  - Copia DISPONIBLE  -> baja directa (un solo documento).
- *  - Copia PRESTADA + razón de NO DEVOLUCIÓN ("no devuelto", "not
- *    returned", "perdida"...) -> es la salida manual para un préstamo
- *    vencido que nunca volvió: se delega en
- *    `loanService.writeOffUnreturned`, que da de baja la copia Y cierra el
- *    préstamo asociado como "unreturned" en una sola operación
- *    `_bulk_docs` (video + préstamo + factura). Sin esto quedaría un
- *    préstamo "active" apuntando a una copia "retired" -> inconsistencia.
- *  - Copia PRESTADA + cualquier otra razón (p.ej. "robo") -> se sigue
- *    exigiendo registrar antes la devolución: una copia que físicamente
- *    está con un cliente no se "roba" del videoclub.
+ *  - CUALQUIER razón salvo "daño irreparable" (incluye "robo",
+ *    "pérdida"/"hurto", "no devuelto", y también "otro" con cualquier
+ *    texto libre) -> la copia queda "missing" (NO "retired" — ver
+ *    `repositories/videoRepository.js`), recuperable con `recoverCopy` si
+ *    aparece. Se trata así por default porque, salvo un daño físico
+ *    confirmado, NUNCA se puede estar 100% seguro de que una copia no va a
+ *    volver — "otro" en particular es un cajón de sastre (el motivo real
+ *    puede ser cualquier cosa) así que sería incorrecto asumir que es
+ *    definitivo solo porque no encaja en las demás categorías. Aplica
+ *    IGUAL si la copia estaba DISPONIBLE (robada/perdida en tienda) o
+ *    PRESTADA (con el cliente): en los dos casos todavía puede volver.
+ *      - Si estaba PRESTADA, además se delega en
+ *        `loanService.writeOffUnreturned`, que en una sola operación
+ *        `_bulk_docs` (video + préstamo + factura) marca la copia
+ *        "missing" Y cierra el préstamo como "unreturned" — sin esto
+ *        quedaría un préstamo "active" apuntando a una copia que ya no
+ *        está en circulación -> inconsistencia.
+ *      - Si estaba DISPONIBLE, es una operación de un solo documento (no
+ *        hay préstamo que cerrar).
+ *  - "Daño irreparable" (única razón realmente DEFINITIVA) -> "retired"
+ *    directo: acá sí no hay duda de que la copia no vuelve. Si la copia
+ *    estaba PRESTADA, esa razón exige registrar la devolución antes
+ *    (implica que ya está físicamente de vuelta); si estaba DISPONIBLE, se
+ *    da de baja ya mismo.
+ *  - Copia "missing" (ya se había marcado con cualquiera de las razones de
+ *    arriba) -> SEGUNDA confirmación: el propietario decide que ya no vale
+ *    la pena seguir esperándola. Esta SIEMPRE es definitiva ("retired"),
+ *    sea cual sea la razón que se escriba esta vez.
+ *
+ * CORRECCIÓN (detectada por el propietario al revisar la app, cuatro
+ * problemas reales):
+ *   1. "robo"/"pérdida"/"no devuelto" se trataban antes como baja
+ *      PERMANENTE ("retired"), igual que un daño irreparable. Pero a
+ *      diferencia de un daño irreparable, una copia robada o perdida
+ *      TODAVÍA puede aparecer. Ahora van a "missing", reversible.
+ *   2. Pedía "registra la devolución antes de darla de baja" incluso para
+ *      "robo" de una copia prestada — imposible de cumplir si al cliente
+ *      se la robaron (no la va a devolver). Ya no aplica.
+ *   3. El punto 1 solo se había corregido para copias PRESTADAS: un
+ *      "robo"/"pérdida" de una copia DISPONIBLE (en tienda) seguía yendo
+ *      directo a "retired" permanente, inconsistente con el mismo caso
+ *      prestado. Ahora usa el mismo criterio en los dos casos.
+ *   4. "otro" (razón libre, sin patrón fijo) quedaba "retired" directo
+ *      igual que "daño irreparable" — pero "otro" puede ser CUALQUIER
+ *      cosa, no hay motivo para asumir que es definitivo. Ahora el criterio
+ *      se invirtió: todo es recuperable ("missing") POR DEFECTO, y la
+ *      ÚNICA excepción reconocida como definitiva es "daño irreparable".
  *
  * NOTA: NINGÚN proceso automático da de baja copias. Un préstamo vencido
  * permanece "active" y su copia "loaned" hasta que el propietario ejecuta
  * una de las dos salidas manuales (devolución tardía o esta baja).
  */
-// Se compara contra la razón YA PLEGADA (sin acentos, minúsculas) para que
-// "pérdida", "no devolución", "extraviada" también cuenten como no devolución.
-const NO_RETURN_REASON = /no\s*devuelt|not\s*returned|sin\s*devoluci|no\s*devoluci|perdid|extravi|lost/i;
+// Se compara contra la razón YA PLEGADA (sin acentos, minúsculas). ÚNICA
+// razón tratada como DEFINITIVA ("daño irreparable" y variantes) — todo lo
+// demás (incluido "otro", cualquier texto libre) se trata como recuperable
+// por defecto: ver el bloque de comentarios de arriba.
+const PERMANENT_REASON = /da[ñn]o|irreparabl|destru|inservible|rot[ao]|quebrad/i;
 
 async function retireCopy(id, copyId, body) {
   const reason = (body.reason || '').trim();
   if (!reason) throw badRequest('La baja requiere `reason` (no devuelto, robo, etc.).');
   const date = body.date || new Date().toISOString();
-  const isNoReturn = NO_RETURN_REASON.test(foldForSearch(reason));
+  // "isNoReturn" = recuperable ("missing"). Todo lo es POR DEFECTO, salvo
+  // que la razón matchee el patrón de daño permanente (ver comentario de
+  // PERMANENT_REASON arriba) -> esa es la ÚNICA que va directo a "retired".
+  const isNoReturn = !PERMANENT_REASON.test(foldForSearch(reason));
 
-  // Lectura previa para decidir el camino (disponible vs prestada).
+  // Lectura previa para decidir el camino (disponible / prestada / missing).
   const video = await videoRepo.getById(id);
   const copy = (video.copies || []).find((c) => c.copy_id === copyId);
   if (!copy) throw notFound(`Copia ${copyId} no existe en el video ${id}.`);
@@ -366,7 +409,7 @@ async function retireCopy(id, copyId, body) {
     if (!isNoReturn) {
       throw conflict(
         `La copia ${copyId} está prestada. Registra su devolución antes de darla de baja ` +
-          `(salvo que la razón sea "no devuelto").`
+          `(salvo que la razón sea "no devuelto", "pérdida" o "robo").`
       );
     }
     // Buscar el préstamo activo que tiene esta copia y cerrarlo como no
@@ -382,15 +425,62 @@ async function retireCopy(id, copyId, body) {
       return loanService.writeOffUnreturned(loan._id, { reason, date });
     }
     // Copia "loaned" sin préstamo activo asociado (inconsistencia previa):
-    // se da de baja igual, best-effort.
+    // sigue siendo "no devuelto/pérdida/robo" (isNoReturn ya se validó
+    // arriba) -> cae al mismo camino "missing" de abajo, sin loan que cerrar.
   }
 
+  if (copy.status === 'missing') {
+    // CONFIRMACIÓN DEFINITIVA: el propietario ya había marcado esta copia
+    // como no disponible (ver bloque de abajo o `writeOffUnreturned`) y
+    // ahora decide que ya no vale la pena seguir esperándola. A partir de
+    // acá SIEMPRE es terminal ("retired"), sea cual sea la razón que se
+    // escriba esta vez (aunque repita "robo") — es la SEGUNDA confirmación,
+    // no la primera.
+    return videoRepo.update(id, (doc) => {
+      const c = (doc.copies || []).find((x) => x.copy_id === copyId);
+      if (!c) throw notFound(`Copia ${copyId} no existe en el video ${id}.`);
+      if (c.status !== 'missing') throw conflict(`La copia ${copyId} ya no está "missing" (está "${c.status}").`);
+      c.status = 'retired';
+      c.retirement = { date, reason };
+      return doc;
+    });
+  }
+
+  // Copia "available" (en tienda, nunca salió o ya fue devuelta):
+  //   - razón de NO DEVOLUCIÓN ("robo"/"pérdida"/"hurto" — un robo o
+  //     pérdida EN TIENDA también puede recuperarse después, mismo criterio
+  //     que una copia prestada) -> "missing", recuperable.
+  //   - cualquier otra razón (ej. "daño irreparable") -> "retired" directo,
+  //     definitivo: no hay ninguna duda de que la copia no va a volver.
   return videoRepo.update(id, (doc) => {
     const c = (doc.copies || []).find((x) => x.copy_id === copyId);
     if (!c) throw notFound(`Copia ${copyId} no existe en el video ${id}.`);
     if (c.status === 'retired') throw conflict(`La copia ${copyId} ya está dada de baja.`);
-    c.status = 'retired';
+    c.status = isNoReturn ? 'missing' : 'retired';
     c.retirement = { date, reason };
+    return doc;
+  });
+}
+
+/**
+ * Recuperar una copia "missing" (se había marcado "no devuelto" / "pérdida"
+ * / "robo" mientras estaba prestada, y apareció). Vuelve a "available" —
+ * NO reabre el préstamo asociado, que queda como registro histórico de que
+ * en su momento no se devolvió a tiempo (ver comentario en
+ * `loanService.writeOffUnreturned`). Operación de UN solo documento: no
+ * hace falta `_bulk_docs`, el préstamo no se toca.
+ */
+async function recoverCopy(id, copyId) {
+  return videoRepo.update(id, (doc) => {
+    const c = (doc.copies || []).find((x) => x.copy_id === copyId);
+    if (!c) throw notFound(`Copia ${copyId} no existe en el video ${id}.`);
+    if (c.status !== 'missing') {
+      throw conflict(
+        `La copia ${copyId} no está en estado "missing" (está "${c.status}"); no hay nada que recuperar.`
+      );
+    }
+    c.status = 'available';
+    c.retirement = null;
     return doc;
   });
 }
@@ -486,6 +576,7 @@ module.exports = {
   update,
   addCopies,
   retireCopy,
+  recoverCopy,
   search,
   // exportado para pruebas manuales / reuso y para el backfill
   // (`scripts/backfill-search-titles.js`) — fuente única de la lógica de

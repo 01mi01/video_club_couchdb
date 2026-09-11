@@ -69,5 +69,8 @@ export const LOAN_STATUS_LABEL = {
 export const COPY_STATUS_LABEL = {
   available: 'Disponible',
   loaned: 'Prestada',
+  // No devuelta / perdida / robada mientras estaba prestada — NO es
+  // definitivo, se puede recuperar (ver VideoDetailPage > recoverCopy).
+  missing: 'No disponible',
   retired: 'De baja',
 };

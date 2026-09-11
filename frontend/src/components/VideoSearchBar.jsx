@@ -7,7 +7,7 @@ import { Button, Field, TextInput, Select } from './ui.jsx';
 // parametro de GET /api/videos/search (indices Mango en el backend).
 // La busqueda por nombre es insensible a acentos y mayusculas.
 export default function VideoSearchBar({ onSearch, onClear, busy }) {
-  const { genres } = useRefData();
+  const { genres, oscarCategories } = useRefData();
   const [f, setF] = useState({ title: '', genreId: '', actor: '', oscarNomination: '', oscarNominated: false });
 
   function submit(e) {
@@ -55,12 +55,20 @@ export default function VideoSearchBar({ onSearch, onClear, busy }) {
             placeholder="ej. Song Kang-ho"
           />
         </Field>
-        <Field label="Nominación al Oscar" hint="Categoría, ej. Best Picture">
-          <TextInput
+        <Field label="Nominación al Oscar" hint="Busca en español o en inglés indistintamente">
+          <Select
             value={f.oscarNomination}
             onChange={(e) => setF({ ...f, oscarNomination: e.target.value })}
-            placeholder="ej. Best Director"
-          />
+          >
+            <option value="">— cualquiera —</option>
+            {[...oscarCategories]
+              .sort((a, b) => a.name_es.localeCompare(b.name_es))
+              .map((c) => (
+                <option key={c._id} value={c.name_es}>
+                  {c.name_es} ({c.name_en})
+                </option>
+              ))}
+          </Select>
         </Field>
       </div>
       <div className="flex flex-wrap items-center justify-between gap-3 border-t-2 border-ink px-4 py-3">

@@ -27,7 +27,7 @@ export default function VideoFormPage() {
   const { id } = useParams();
   const isEdit = !!id;
   const navigate = useNavigate();
-  const { genres, refreshGenres } = useRefData();
+  const { genres, oscarCategories, refreshGenres, refreshOscarCategories } = useRefData();
 
   const [form, setForm] = useState(EMPTY);
   const [loading, setLoading] = useState(isEdit);
@@ -68,6 +68,38 @@ export default function VideoFormPage() {
         : [...form.genre_ids, gid],
     });
 
+  // Una categoría INACTIVA se excluye del selector salvo que la película
+  // ya la tenga asignada (mismo criterio que género — ver filtro abajo).
+  const selectableCategories = (selectedIds) =>
+    [...oscarCategories]
+      .filter((c) => c.active !== false || selectedIds.includes(c._id))
+      .sort((a, b) => a.name_es.localeCompare(b.name_es));
+
+  const toggleNomination = (cid) =>
+    setForm((f) => ({
+      ...f,
+      oscar_nominations: f.oscar_nominations.includes(cid)
+        ? f.oscar_nominations.filter((x) => x !== cid)
+        : [...f.oscar_nominations, cid],
+    }));
+
+  // Un premio ganado implica nominación (misma regla que valida el
+  // backend en `videoService.normalizeVideoInput`): marcar un "ganado" lo
+  // agrega también a nominaciones si no estaba, para que el formulario
+  // refleje de inmediato lo que el servidor terminaría guardando.
+  const toggleWin = (cid) =>
+    setForm((f) => {
+      const winning = !f.oscar_wins.includes(cid);
+      return {
+        ...f,
+        oscar_wins: winning ? [...f.oscar_wins, cid] : f.oscar_wins.filter((x) => x !== cid),
+        oscar_nominations:
+          winning && !f.oscar_nominations.includes(cid)
+            ? [...f.oscar_nominations, cid]
+            : f.oscar_nominations,
+      };
+    });
+
   async function submit(e) {
     e.preventDefault();
     setBusy(true);
@@ -83,8 +115,8 @@ export default function VideoFormPage() {
       duration_minutes: Number(form.duration_minutes),
       genre_ids: form.genre_ids,
       release_year: Number(form.release_year),
-      oscar_nominations: clean(form.oscar_nominations),
-      oscar_wins: clean(form.oscar_wins),
+      oscar_nominations: form.oscar_nominations, // IDs de oscar_category
+      oscar_wins: form.oscar_wins, // IDs de oscar_category
       main_actors: clean(form.main_actors),
       unit_cost: Number(form.unit_cost),
     };
@@ -98,6 +130,7 @@ export default function VideoFormPage() {
         ? await API.updateVideo(id, payload)
         : await API.createVideo(payload);
       await refreshGenres();
+      await refreshOscarCategories();
       navigate(`/videos/${saved._id || id}`);
     } catch (err) {
       setError(err.message);
@@ -253,21 +286,62 @@ export default function VideoFormPage() {
 
         <Card>
           <h2 className="mb-4 text-xl font-semibold">Premios Oscar</h2>
+          <p className="mb-3 text-xs text-ink-soft">
+            Categorías normalizadas (ver "Categorías Oscar" en el menú) — permite buscar
+            préstamos por nominación tanto en español como en inglés.
+          </p>
           <div className="grid gap-4 sm:grid-cols-2">
-            <StringListField
-              label="Nominaciones"
-              hint="Categorías a las que fue nominada"
-              value={form.oscar_nominations}
-              onChange={(v) => set({ oscar_nominations: v })}
-              placeholder="ej. Best Picture"
-            />
-            <StringListField
-              label="Premios ganados"
-              hint="Toda categoría ganada cuenta también como nominación"
-              value={form.oscar_wins}
-              onChange={(v) => set({ oscar_wins: v })}
-              placeholder="ej. Best Director"
-            />
+            <div>
+              <span className="label">Nominaciones</span>
+              <div className="mt-1 max-h-64 overflow-y-auto border-2 border-ink p-3">
+                {selectableCategories(form.oscar_nominations).length === 0 ? (
+                  <p className="text-xs text-ink-soft">
+                    Sin categorías. Créalas en "Categorías Oscar".
+                  </p>
+                ) : (
+                  selectableCategories(form.oscar_nominations).map((c) => (
+                    <label key={c._id} className="flex items-center gap-2 py-0.5 text-sm">
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 accent-[#0d9797]"
+                        checked={form.oscar_nominations.includes(c._id)}
+                        onChange={() => toggleNomination(c._id)}
+                      />
+                      {c.name_es}
+                      <span className="text-xs text-ink-soft">({c.name_en})</span>
+                      {c.active === false && <Badge tone="soft">Inactiva</Badge>}
+                    </label>
+                  ))
+                )}
+              </div>
+            </div>
+            <div>
+              <span className="label">Premios ganados</span>
+              <div className="mt-1 max-h-64 overflow-y-auto border-2 border-ink p-3">
+                {selectableCategories(form.oscar_wins).length === 0 ? (
+                  <p className="text-xs text-ink-soft">
+                    Sin categorías. Créalas en "Categorías Oscar".
+                  </p>
+                ) : (
+                  selectableCategories(form.oscar_wins).map((c) => (
+                    <label key={c._id} className="flex items-center gap-2 py-0.5 text-sm">
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 accent-[#0d9797]"
+                        checked={form.oscar_wins.includes(c._id)}
+                        onChange={() => toggleWin(c._id)}
+                      />
+                      {c.name_es}
+                      <span className="text-xs text-ink-soft">({c.name_en})</span>
+                      {c.active === false && <Badge tone="soft">Inactiva</Badge>}
+                    </label>
+                  ))
+                )}
+              </div>
+              <span className="mt-1 block text-xs text-ink-soft">
+                Marcar un premio ganado lo agrega también como nominación.
+              </span>
+            </div>
           </div>
         </Card>
 

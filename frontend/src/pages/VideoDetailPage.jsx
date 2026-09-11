@@ -23,7 +23,7 @@ const RETIRE_REASONS = ['no devuelto', 'robo', 'daño irreparable', 'pérdida', 
 export default function VideoDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { genreNames } = useRefData();
+  const { genreNames, oscarCategoryNames } = useRefData();
   const { data: v, loading, error, reload } = useAsync(() => API.getVideo(id), [id]);
 
   const [banner, setBanner] = useState(null);
@@ -126,9 +126,9 @@ export default function VideoDetailPage() {
               <div>
                 <span className="font-semibold">Ganados: </span>
                 {v.oscar_wins?.length ? (
-                  v.oscar_wins.map((w) => (
-                    <span key={w} className="mr-1 inline-block">
-                      <Badge tone="gold">{w}</Badge>
+                  v.oscar_wins.map((id) => (
+                    <span key={id} className="mr-1 inline-block">
+                      <Badge tone="gold">{oscarCategoryNames([id])[0]}</Badge>
                     </span>
                   ))
                 ) : (
@@ -138,7 +138,7 @@ export default function VideoDetailPage() {
               <div>
                 <span className="font-semibold">Nominaciones: </span>
                 {v.oscar_nominations?.length ? (
-                  <span className="text-ink-soft">{v.oscar_nominations.join(', ')}</span>
+                  <span className="text-ink-soft">{oscarCategoryNames(v.oscar_nominations).join(', ')}</span>
                 ) : (
                   <span className="text-ink-soft">ninguna</span>
                 )}

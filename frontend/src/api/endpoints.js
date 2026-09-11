@@ -24,6 +24,15 @@ export const updateGenre = (id, body) => data(api.put(`/genres/${id}`, body));
 export const deactivateGenre = (id) => data(api.patch(`/genres/${id}/deactivate`));
 export const activateGenre = (id) => data(api.patch(`/genres/${id}/activate`));
 
+// --- Categorías de Oscar (entidad normalizada; mismo patrón que género) ---
+// Resuelve que la búsqueda por nominación funcione en inglés Y español.
+export const listOscarCategories = () => data(api.get('/oscar-categories'));
+export const getOscarCategory = (id) => data(api.get(`/oscar-categories/${id}`));
+export const createOscarCategory = (body) => data(api.post('/oscar-categories', body));
+export const updateOscarCategory = (id, body) => data(api.put(`/oscar-categories/${id}`, body));
+export const deactivateOscarCategory = (id) => data(api.patch(`/oscar-categories/${id}/deactivate`));
+export const activateOscarCategory = (id) => data(api.patch(`/oscar-categories/${id}/activate`));
+
 // --- Videos (peliculas) ---
 // App de un solo propietario: se pide un limite amplio para traer todo el
 // catalogo de una vez (las tablas del frontend no paginan).

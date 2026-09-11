@@ -5,6 +5,7 @@ import Layout from './components/Layout.jsx';
 import LoginPage from './pages/LoginPage.jsx';
 import DashboardPage from './pages/DashboardPage.jsx';
 import GenresPage from './pages/GenresPage.jsx';
+import OscarCategoriesPage from './pages/OscarCategoriesPage.jsx';
 import VideosPage from './pages/VideosPage.jsx';
 import VideoFormPage from './pages/VideoFormPage.jsx';
 import VideoDetailPage from './pages/VideoDetailPage.jsx';
@@ -38,6 +39,7 @@ export default function App() {
       >
         <Route path="/" element={<DashboardPage />} />
         <Route path="/generos" element={<GenresPage />} />
+        <Route path="/categorias-oscar" element={<OscarCategoriesPage />} />
 
         <Route path="/videos" element={<VideosPage />} />
         <Route path="/videos/nuevo" element={<VideoFormPage />} />

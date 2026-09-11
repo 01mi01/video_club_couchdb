@@ -8,6 +8,7 @@ const NAV = [
   { to: '/', label: 'Panel', end: true },
   { to: '/videos', label: 'Películas' },
   { to: '/generos', label: 'Géneros' },
+  { to: '/categorias-oscar', label: 'Categorías Oscar' },
   { to: '/clientes', label: 'Clientes' },
   { to: '/prestamos', label: 'Préstamos' },
   { to: '/facturas', label: 'Facturas' },

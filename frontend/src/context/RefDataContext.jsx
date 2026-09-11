@@ -10,6 +10,7 @@ const RefDataContext = createContext(null);
 
 export function RefDataProvider({ children }) {
   const [genres, setGenres] = useState([]);
+  const [oscarCategories, setOscarCategories] = useState([]);
   const [clients, setClients] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -27,6 +28,12 @@ export function RefDataProvider({ children }) {
     return g;
   }, []);
 
+  const refreshOscarCategories = useCallback(async () => {
+    const o = await API.listOscarCategories();
+    setOscarCategories(Array.isArray(o) ? o : []);
+    return o;
+  }, []);
+
   const refreshClients = useCallback(async () => {
     const c = await API.listClients();
     setClients(Array.isArray(c) ? c : []);
@@ -38,9 +45,14 @@ export function RefDataProvider({ children }) {
   const reload = useCallback(async () => {
     setLoading(true);
     try {
-      const [g, c] = await Promise.all([API.listGenres(), API.listClients()]);
+      const [g, o, c] = await Promise.all([
+        API.listGenres(),
+        API.listOscarCategories(),
+        API.listClients(),
+      ]);
       if (!alive.current) return;
       setGenres(Array.isArray(g) ? g : []);
+      setOscarCategories(Array.isArray(o) ? o : []);
       setClients(Array.isArray(c) ? c : []);
       setError(null);
     } catch (e) {
@@ -56,6 +68,16 @@ export function RefDataProvider({ children }) {
 
   const genreName = useCallback((id) => genres.find((x) => x._id === id)?.name || id, [genres]);
   const genreNames = useCallback((ids) => (ids || []).map(genreName), [genreName]);
+  // Nombre en ESPAÑOL de una categoría de Oscar por id (fallback: el id
+  // mismo, para no romper la pantalla si la referencia quedó huérfana).
+  const oscarCategoryName = useCallback(
+    (id) => oscarCategories.find((x) => x._id === id)?.name_es || id,
+    [oscarCategories]
+  );
+  const oscarCategoryNames = useCallback(
+    (ids) => (ids || []).map(oscarCategoryName),
+    [oscarCategoryName]
+  );
   const clientById = useCallback((id) => clients.find((x) => x._id === id) || null, [clients]);
   const clientName = useCallback(
     (id) => {
@@ -69,14 +91,18 @@ export function RefDataProvider({ children }) {
     <RefDataContext.Provider
       value={{
         genres,
+        oscarCategories,
         clients,
         loading,
         error,
         reload,
         refreshGenres,
+        refreshOscarCategories,
         refreshClients,
         genreName,
         genreNames,
+        oscarCategoryName,
+        oscarCategoryNames,
         clientById,
         clientName,
       }}

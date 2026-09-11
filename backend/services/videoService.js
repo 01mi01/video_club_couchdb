@@ -15,7 +15,10 @@
 
 const videoRepo = require('../repositories/videoRepository');
 const genreRepo = require('../repositories/genreRepository');
+const oscarCategoryRepo = require('../repositories/oscarCategoryRepository');
+const oscarCategoryService = require('./oscarCategoryService');
 const loanRepo = require('../repositories/loanRepository');
+const { foldForSearch } = require('../utils/textFold');
 const { badRequest, notFound, conflict } = require('../utils/errors');
 
 /* ---------------------------------------------------------------------------
@@ -59,15 +62,10 @@ function buildAllTitles({ display_title, original_title, english_title, alternat
  * NOTA (Parte A: Consistencia): `search_titles` es un campo derivado que
  * se recalcula en la aplicación en cada `create`/`update`; el índice Mango
  * sobre él se reconstruye de forma asíncrona -> consistencia eventual.
+ *
+ * `foldForSearch` vive en `utils/textFold.js`: se reutiliza tal cual para
+ * `search_names` de categoría de Oscar (mismo problema, misma solución).
  */
-function foldForSearch(s) {
-  return String(s || '')
-    .normalize('NFD') // separa cada letra acentuada en letra base + marca combinante
-    .replace(/\p{M}/gu, '') // elimina esas marcas: á->a, ñ->n, ü->u, é->e ...
-    .toLowerCase()
-    .replace(/\s+/g, ' ')
-    .trim();
-}
 
 /** `all_titles` -> forma canónica para búsqueda (sin acentos, minúsculas). */
 function buildSearchTitles(allTitles) {
@@ -82,7 +80,40 @@ function escapeRegex(s) {
  * Validación y normalización de entrada
  * ------------------------------------------------------------------------- */
 
-async function normalizeVideoInput(body, { partial = false, existingGenreIds = [] } = {}) {
+/**
+ * Resuelve un arreglo de IDs de `oscar_category` (nominaciones o premios),
+ * validando que cada uno exista y que una categoría INACTIVA no se pueda
+ * asignar a un video NUEVO ni AGREGAR en una edición — exactamente el
+ * mismo patrón usado para `genre_ids` (ver el bloque de géneros más
+ * abajo): si el video YA la referenciaba, conservarla en una edición no
+ * cuenta como "asignar" -> se permite.
+ */
+async function resolveCategoryIds(rawIds, existingIds = []) {
+  const ids = Array.isArray(rawIds) ? [...new Set(rawIds)] : [];
+  const existingSet = new Set(existingIds);
+  for (const cid of ids) {
+    const cat = await oscarCategoryRepo.tryGetById(cid);
+    if (!cat || cat.type !== 'oscar_category') {
+      throw badRequest(`Categoría de Oscar inexistente: ${cid}`);
+    }
+    if (cat.active === false && !existingSet.has(cid)) {
+      throw badRequest(
+        `La categoría de Oscar "${cat.name_es}" está inactiva: no se puede asignar a películas nuevas ni agregar en una edición.`
+      );
+    }
+  }
+  return ids;
+}
+
+async function normalizeVideoInput(
+  body,
+  {
+    partial = false,
+    existingGenreIds = [],
+    existingOscarNominationIds = [],
+    existingOscarWinIds = [],
+  } = {}
+) {
   const out = {};
 
   // --- Títulos ---
@@ -143,18 +174,23 @@ async function normalizeVideoInput(body, { partial = false, existingGenreIds = [
     throw badRequest('`release_year` es obligatorio.');
   }
 
-  // --- Oscars: arreglos planos de categorías (indexables) ---
+  // --- Oscars: arreglos de IDs a `oscar_category` normalizada -----------
+  // DECISIÓN (corrige un problema real, ver oscarCategoryService.js):
+  // antes eran strings libres en inglés ("Best Picture"), así que buscar
+  // "Mejor Película" nunca encontraba nada. Ahora referencian documentos
+  // `oscar_category` (mismo patrón que género): guardan `name_en` +
+  // `name_es`, la búsqueda funciona en ambos idiomas.
   if (body.oscar_nominations !== undefined || !partial) {
-    out.oscar_nominations = Array.isArray(body.oscar_nominations)
-      ? body.oscar_nominations.map((s) => String(s).trim()).filter(Boolean)
-      : [];
+    out.oscar_nominations = await resolveCategoryIds(
+      body.oscar_nominations,
+      existingOscarNominationIds
+    );
   }
   if (body.oscar_wins !== undefined || !partial) {
-    out.oscar_wins = Array.isArray(body.oscar_wins)
-      ? body.oscar_wins.map((s) => String(s).trim()).filter(Boolean)
-      : [];
+    out.oscar_wins = await resolveCategoryIds(body.oscar_wins, existingOscarWinIds);
   }
-  // Coherencia: todo lo ganado tuvo que ser nominado.
+  // Coherencia: todo lo ganado tuvo que ser nominado (misma regla de
+  // antes; ahora compara IDs de categoría en vez de strings).
   if (out.oscar_wins && out.oscar_nominations) {
     const noms = new Set(out.oscar_nominations);
     for (const w of out.oscar_wins) {
@@ -242,6 +278,8 @@ async function update(id, body) {
   const patch = await normalizeVideoInput(body, {
     partial: true,
     existingGenreIds: current.genre_ids || [],
+    existingOscarNominationIds: current.oscar_nominations || [],
+    existingOscarWinIds: current.oscar_wins || [],
   });
   return videoRepo.update(id, (doc) => {
     Object.assign(doc, patch);
@@ -385,11 +423,26 @@ async function search(query) {
     useIndex = useIndex || 'idx-actors';
   }
   if (oscarNomination && oscarNomination.trim()) {
-    // Índice: idx-oscar-nominations sobre `oscar_nominations` -> búsqueda
-    // por NOMINACIÓN al Oscar (por categoría).
-    and.push({
-      oscar_nominations: { $elemMatch: { $regex: `(?i)${escapeRegex(oscarNomination.trim())}` } },
-    });
+    // PROBLEMA COMPLEJO RESUELTO: antes de normalizar categorías, esto
+    // comparaba el texto buscado directamente contra strings libres en
+    // inglés -> "Mejor Película" nunca encontraba nada, solo "Best
+    // Picture". Se resuelve en DOS pasos:
+    //   1. Traducir el texto a IDs de `oscar_category`, buscando por
+    //      `name_en` O `name_es` (plegado: sin acentos, minúsculas) contra
+    //      `search_names` -> `oscarCategoryService.findIdsByText`. Esa
+    //      colección es chica (~24 documentos), se filtra en memoria: NO
+    //      hace falta un índice Mango ahí (sería decorativo).
+    //   2. Con esos IDs, se arma un `$in` para la consulta Mango REAL
+    //      sobre la colección grande (videos), que sí usa el índice
+    //      idx-oscar-nominations.
+    const categoryIds = await oscarCategoryService.findIdsByText(oscarNomination.trim());
+    if (categoryIds.length === 0) {
+      // Ninguna categoría coincide con el texto buscado (en ninguno de
+      // los dos idiomas) -> ninguna película puede coincidir. Se corta
+      // aquí en vez de mandar a Mango un `$in` vacío.
+      return [];
+    }
+    and.push({ oscar_nominations: { $elemMatch: { $in: categoryIds } } });
     useIndex = useIndex || 'idx-oscar-nominations';
   } else if (oscarNominated === 'true' || oscarNominated === true) {
     // "Películas que tuvieron alguna nominación al Oscar".

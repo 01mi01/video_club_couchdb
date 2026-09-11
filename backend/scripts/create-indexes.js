@@ -85,8 +85,15 @@ const INDEXES = [
   {
     ddoc: 'idx-oscar-nominations',
     name: 'idx-oscar-nominations',
-    // `oscar_nominations` es un arreglo plano de categorías nominadas.
-    // Sirve tanto "¿fue nominada?" como "nominada en tal categoría".
+    // `oscar_nominations` es un arreglo de IDs a `oscar_category`
+    // (categoría normalizada, con `name_en`/`name_es` — antes era texto
+    // libre en inglés, lo que rompía la búsqueda en español). El texto
+    // buscado se resuelve primero a IDs de categoría en memoria
+    // (`oscarCategoryService.findIdsByText`, colección chica) y LUEGO se
+    // consulta este índice con esos IDs (`$elemMatch: { $in: [...] }`) —
+    // el índice en sí sigue siendo sobre el mismo campo, solo cambió qué
+    // tipo de valor guarda. Sirve tanto "¿fue nominada?" como "nominada en
+    // tal categoría".
     fields: ['oscar_nominations'],
     why: 'Gestión de Préstamos 1: "Buscar película por nominación al Oscar".',
   },

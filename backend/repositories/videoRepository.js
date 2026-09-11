@@ -31,10 +31,13 @@
  *     release_year: number,
  *
  *     // --- Oscar --------------------------------------------------------
- *     // Arreglos planos de strings (categorías) para poder indexarlos y
- *     // buscar "películas nominadas al Oscar" / "por categoría".
- *     oscar_nominations: ["Best Picture", ...],
- *     oscar_wins:        ["Best Director", ...],
+ *     // REFERENCIA a categorías normalizadas (oscar_category), NO strings
+ *     // libres. Antes eran strings en inglés ("Best Picture"), lo que
+ *     // rompía la búsqueda en español ("Mejor Película"). Mismo patrón
+ *     // que género: documento propio con `name_en`/`name_es`, referenciado
+ *     // por ID (ver repositories/oscarCategoryRepository.js).
+ *     oscar_nominations: ["oscar_category:<uuid>", ...],
+ *     oscar_wins:        ["oscar_category:<uuid>", ...],
  *
  *     main_actors: ["string", ...],      // arreglo plano -> indexable
  *

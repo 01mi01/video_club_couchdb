@@ -7,8 +7,15 @@
  * `genre_ids: [...]`, nunca el nombre embebido.
  *
  * Documento:
- *   { _id: "genre:<uuid>", type: "genre", name, description,
+ *   { _id: "genre:<uuid>", type: "genre", name, description, active,
  *     created_at, updated_at }
+ *
+ * `active` (boolean, default true): reemplaza el borrado permanente. El
+ * enunciado nunca pide "eliminar" ninguna entidad — su patrón es siempre
+ * no-destructivo (bajas de copia, bloqueo de cliente) — así que género
+ * sigue el mismo patrón: se desactiva, no se borra. Sin `remove()` a
+ * propósito: no existe ningún camino de borrado real para género (ver
+ * `genreService.deactivate`/`activate`).
  */
 
 const repo = require('./couchRepository');
@@ -20,5 +27,4 @@ module.exports = {
   tryGetById: (id) => repo.tryGetById(id),
   list: (opts) => repo.listByType(TYPE, opts),
   update: (id, mutator) => repo.updateWithRetry(id, mutator, { label: 'Género' }),
-  remove: (id) => repo.remove(id, { label: 'Género' }),
 };

@@ -20,7 +20,10 @@ exports.update = async (req, res) => {
   res.json(await genreService.update(req.params.id, req.body || {}));
 };
 
-exports.remove = async (req, res) => {
-  await genreService.remove(req.params.id);
-  res.status(204).end();
+exports.deactivate = async (req, res) => {
+  res.json(await genreService.deactivate(req.params.id));
+};
+
+exports.activate = async (req, res) => {
+  res.json(await genreService.activate(req.params.id));
 };

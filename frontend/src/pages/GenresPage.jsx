@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useAsync } from '../hooks/useAsync.js';
 import { useRefData } from '../context/RefDataContext.jsx';
 import * as API from '../api/endpoints.js';
-import { PageHeader, Card, Button, Spinner, Alert, Field, TextInput, TextArea, EmptyState } from '../components/ui.jsx';
+import { PageHeader, Card, Button, Spinner, Alert, Field, TextInput, TextArea, EmptyState, Badge } from '../components/ui.jsx';
 import Modal from '../components/Modal.jsx';
 import ConfirmDialog from '../components/ConfirmDialog.jsx';
 
@@ -16,9 +16,9 @@ export default function GenresPage() {
   const [saveErr, setSaveErr] = useState(null);
   const [busy, setBusy] = useState(false);
   const [banner, setBanner] = useState(null);
-  const [toDelete, setToDelete] = useState(null); // género pendiente de confirmar borrado
-  const [deleteErr, setDeleteErr] = useState(null);
-  const [deleting, setDeleting] = useState(false);
+  const [toToggle, setToToggle] = useState(null); // género pendiente de confirmar activar/desactivar
+  const [toggleErr, setToggleErr] = useState(null);
+  const [toggling, setToggling] = useState(false);
 
   function openNew() {
     setEditing({});
@@ -49,27 +49,33 @@ export default function GenresPage() {
     }
   }
 
-  function askRemove(g) {
-    setToDelete(g);
-    setDeleteErr(null);
+  // No hay borrado real de género (el enunciado nunca pide "eliminar"): se
+  // desactiva o reactiva, siguiendo el mismo patrón no-destructivo que la
+  // baja de copias y el bloqueo de clientes.
+  function askToggle(g) {
+    setToToggle(g);
+    setToggleErr(null);
   }
 
-  async function confirmRemove() {
-    setDeleting(true);
-    setDeleteErr(null);
+  async function confirmToggle() {
+    const activating = toToggle.active === false;
+    setToggling(true);
+    setToggleErr(null);
     try {
-      await API.deleteGenre(toDelete._id);
-      const name = toDelete.name;
-      setToDelete(null);
+      if (activating) await API.activateGenre(toToggle._id);
+      else await API.deactivateGenre(toToggle._id);
+      const name = toToggle.name;
+      setToToggle(null);
       await reload();
       await refreshGenres();
-      setBanner({ kind: 'success', msg: `Género "${name}" eliminado.` });
+      setBanner({
+        kind: 'success',
+        msg: activating ? `Género "${name}" reactivado.` : `Género "${name}" desactivado.`,
+      });
     } catch (err) {
-      // El backend rechaza (409) si algun video todavia lo referencia.
-      const extra = err.details?.video_ids ? ` (${err.details.video_ids.length} película[s])` : '';
-      setDeleteErr(err.message + extra);
+      setToggleErr(err.message);
     } finally {
-      setDeleting(false);
+      setToggling(false);
     }
   }
 
@@ -103,28 +109,41 @@ export default function GenresPage() {
                 <tr>
                   <th>Nombre</th>
                   <th>Descripción</th>
-                  <th className="w-40 text-right">Acciones</th>
+                  <th className="w-28">Estado</th>
+                  <th className="w-48 text-right">Acciones</th>
                 </tr>
               </thead>
               <tbody>
                 {[...genres]
                   .sort((a, b) => a.name.localeCompare(b.name))
-                  .map((g) => (
-                    <tr key={g._id}>
-                      <td className="font-semibold">{g.name}</td>
-                      <td className="text-ink-soft">{g.description}</td>
-                      <td className="text-right">
-                        <div className="flex justify-end gap-2">
-                          <Button size="sm" variant="ghost" onClick={() => openEdit(g)}>
-                            Editar
-                          </Button>
-                          <Button size="sm" variant="danger" onClick={() => askRemove(g)}>
-                            Eliminar
-                          </Button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                  .map((g) => {
+                    const inactive = g.active === false;
+                    return (
+                      <tr key={g._id}>
+                        <td className="font-semibold">{g.name}</td>
+                        <td className="text-ink-soft">{g.description}</td>
+                        <td>
+                          <Badge tone={inactive ? 'soft' : 'teal'}>
+                            {inactive ? 'Inactivo' : 'Activo'}
+                          </Badge>
+                        </td>
+                        <td className="text-right">
+                          <div className="flex justify-end gap-2">
+                            <Button size="sm" variant="ghost" onClick={() => openEdit(g)}>
+                              Editar
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant={inactive ? 'primary' : 'danger'}
+                              onClick={() => askToggle(g)}
+                            >
+                              {inactive ? 'Activar' : 'Desactivar'}
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
               </tbody>
             </table>
           </div>
@@ -167,16 +186,24 @@ export default function GenresPage() {
       </Modal>
 
       <ConfirmDialog
-        open={!!toDelete}
-        title="Eliminar género"
-        message={`¿Eliminar el género "${toDelete?.name}"?`}
-        detail="Esta acción no se puede deshacer. No se permite si alguna película todavía lo referencia."
-        confirmLabel="Eliminar género"
-        danger
-        busy={deleting}
-        error={deleteErr}
-        onCancel={() => setToDelete(null)}
-        onConfirm={confirmRemove}
+        open={!!toToggle}
+        title={toToggle?.active === false ? 'Activar género' : 'Desactivar género'}
+        message={
+          toToggle?.active === false
+            ? `¿Reactivar el género "${toToggle?.name}"? Volverá a poder asignarse a películas nuevas.`
+            : `¿Desactivar el género "${toToggle?.name}"?`
+        }
+        detail={
+          toToggle?.active === false
+            ? undefined
+            : 'No se elimina: el documento se conserva y las películas que ya lo tienen lo siguen mostrando sin problema. Solo deja de poder asignarse a películas nuevas o agregarse en una edición.'
+        }
+        confirmLabel={toToggle?.active === false ? 'Activar género' : 'Desactivar género'}
+        danger={toToggle?.active !== false}
+        busy={toggling}
+        error={toggleErr}
+        onCancel={() => setToToggle(null)}
+        onConfirm={confirmToggle}
       />
     </div>
   );

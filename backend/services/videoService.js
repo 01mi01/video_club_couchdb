@@ -82,7 +82,7 @@ function escapeRegex(s) {
  * Validación y normalización de entrada
  * ------------------------------------------------------------------------- */
 
-async function normalizeVideoInput(body, { partial = false } = {}) {
+async function normalizeVideoInput(body, { partial = false, existingGenreIds = [] } = {}) {
   const out = {};
 
   // --- Títulos ---
@@ -114,9 +114,20 @@ async function normalizeVideoInput(body, { partial = false } = {}) {
     const ids = Array.isArray(body.genre_ids) ? [...new Set(body.genre_ids)] : [];
     if (ids.length === 0) throw badRequest('`genre_ids` debe tener al menos un género.');
     // Se valida que cada género exista: CouchDB no tiene claves foráneas.
+    const existingSet = new Set(existingGenreIds);
     for (const gid of ids) {
       const g = await genreRepo.tryGetById(gid);
       if (!g || g.type !== 'genre') throw badRequest(`Género inexistente: ${gid}`);
+      // Un género INACTIVO (`active: false`, ver genreService.deactivate) no
+      // se puede asignar a un video NUEVO ni AGREGAR a uno existente. Pero
+      // si el video YA lo referenciaba, conservarlo en una edición no
+      // cuenta como "asignar" -> se permite (así una película existente
+      // sigue mostrando sin problema géneros que luego se desactivaron).
+      if (g.active === false && !existingSet.has(gid)) {
+        throw badRequest(
+          `El género "${g.name}" está inactivo: no se puede asignar a películas nuevas ni agregar en una edición.`
+        );
+      }
     }
     out.genre_ids = ids;
   }
@@ -223,7 +234,15 @@ async function getById(id) {
  *  propios endpoints), para no pisar el estado de las copias por una
  *  edición de metadatos concurrente. */
 async function update(id, body) {
-  const patch = await normalizeVideoInput(body, { partial: true });
+  // Lectura previa SOLO para conocer los `genre_ids` ya asociados (permite
+  // distinguir "conservar un género inactivo que ya tenía" de "agregar uno
+  // inactivo nuevo" -> ver normalizeVideoInput). La escritura real sigue
+  // yendo por `videoRepo.update` (leer-modificar-escribir con reintento).
+  const current = await videoRepo.getById(id);
+  const patch = await normalizeVideoInput(body, {
+    partial: true,
+    existingGenreIds: current.genre_ids || [],
+  });
   return videoRepo.update(id, (doc) => {
     Object.assign(doc, patch);
     // Si cambió algún título, `all_titles` (para mostrar) y `search_titles`

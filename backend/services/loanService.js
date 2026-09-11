@@ -356,15 +356,19 @@ async function returnLoan(loanId, body) {
 
       const cfg = await configService.effectiveConfig();
 
-      // Días reales transcurridos. Para tarifar se recorta al máximo
-      // configurado (la tabla de precios sólo llega hasta ahí); si el
-      // cliente se pasó, se deja constancia en la nota de la factura.
+      // Días REALES transcurridos, SIN capear a `max_days`. El tope de
+      // `max_days` ("no se permiten préstamos mayores a los días
+      // configurados") es una regla de ACEPTACIÓN del plazo pedido AL
+      // CREAR/COTIZAR el préstamo (`pricing.quote` + `resolveTerm`) — no
+      // es un techo silencioso al monto que se termina cobrando aquí. Ver
+      // `pricing.quoteReturn`: si `actualDays` excede la tabla, cobra la
+      // tarifa del día más alto configurado por CADA día real.
       const actualDays = pricing.daysBetween(loan.loan_date, returnDate);
-      const billedDays = Math.min(Math.max(actualDays, 1), cfg.max_days);
       const late = actualDays > loan.days;
+      const early = actualDays < loan.days;
 
-      const breakdown = pricing.quote(
-        billedDays,
+      const breakdown = pricing.quoteReturn(
+        actualDays,
         loan.pricing.movies_count,
         cfg.pricing,
         cfg.discounts
@@ -401,17 +405,33 @@ async function returnLoan(loanId, body) {
         updated_at: now,
       };
 
+      // Nota explicativa: solo cuando el monto recalculado difiere del
+      // pactado (si coincide, `actualDays === loan.days`, no hay nada que
+      // explicar -> null). Si además se excedió `max_days`
+      // (`breakdown.overdue`), se aclara que ya no aplica la tarifa plana
+      // de la tabla sino la del día máximo configurado, cobrada por CADA
+      // día real -- ver `pricing.quoteReturn`.
+      let note = null;
+      if (breakdown.overdue) {
+        note =
+          `Devolución tardía: ${actualDays} día(s) reales vs ${loan.days} pactados. ` +
+          `Días 1-${breakdown.max_days} a tarifa normal, días ${breakdown.max_days + 1}-${actualDays} ` +
+          `a tarifa del día máximo (${breakdown.max_day_rate} Bs/día).`;
+      } else if (late) {
+        note = `Devolución tardía: ${actualDays} día(s) reales vs ${loan.days} pactados. Tarifado a ${actualDays} día(s).`;
+      } else if (early) {
+        note = `Devolución anticipada: ${actualDays} día(s) reales vs ${loan.days} pactados. Recalculado a ${actualDays} día(s).`;
+      }
+
       const invoice = await loanRepo.getInvoice(loan.invoice_id);
       const updatedInvoice = {
         ...invoice,
-        lines: buildInvoiceLines(loan.items, breakdown, billedDays),
+        lines: buildInvoiceLines(loan.items, breakdown, actualDays),
         subtotal: breakdown.base_amount,
         discount_percent: breakdown.discount_percent,
         discount_amount: breakdown.discount_amount,
         total: breakdown.total_amount,
-        note: late
-          ? `Devolución tardía: ${actualDays} días reales vs ${loan.days} pactados. Tarifado a ${billedDays} día(s).`
-          : null,
+        note,
         updated_at: now,
       };
 

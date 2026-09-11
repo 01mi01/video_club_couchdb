@@ -6,7 +6,6 @@
  */
 
 const genreRepo = require('../repositories/genreRepository');
-const videoRepo = require('../repositories/videoRepository');
 const { badRequest, conflict } = require('../utils/errors');
 
 function validate(body) {
@@ -24,7 +23,9 @@ async function create(body) {
   if (existing.some((g) => g.name.toLowerCase() === data.name.toLowerCase())) {
     throw conflict(`Ya existe un género llamado "${data.name}".`);
   }
-  return genreRepo.create(data);
+  // `active: true` por defecto. Ver `deactivate`/`activate` más abajo: es
+  // el reemplazo no-destructivo del viejo DELETE de género.
+  return genreRepo.create({ ...data, active: true });
 }
 
 async function list(opts) {
@@ -44,19 +45,39 @@ async function update(id, body) {
   });
 }
 
-async function remove(id) {
+/**
+ * DESACTIVAR / REACTIVAR un género — reemplaza el borrado permanente.
+ *
+ * DECISIÓN (no pedida por el enunciado, corregida a partir de la revisión):
+ * el profesor NUNCA pide "eliminar" ninguna entidad del sistema; su patrón
+ * es siempre no-destructivo (bajas de copia con fecha/razón, bloqueo de
+ * cliente con fecha/razón). El género es una entidad que agregamos
+ * nosotros (restricción de modelado, no requerimiento del profesor), así
+ * que se alinea con ese mismo patrón: en vez de DELETE se marca
+ * `active: false`.
+ *
+ * Efecto de `active: false` (aplicado en `videoService.normalizeVideoInput`,
+ * no aquí): el género deja de poder asignarse a películas NUEVAS o
+ * agregarse a una edición, pero NO se toca ninguna película que ya lo
+ * referencie — sigue existiendo el documento y se sigue mostrando sin
+ * problema. Por eso, a diferencia del viejo `remove()`, aquí NO hace falta
+ * ninguna comprobación de integridad referencial contra `videoRepo`: no
+ * hay borrado real, no hay nada que proteger.
+ */
+async function deactivate(id) {
   await genreRepo.getById(id); // 404 si no existe
-  // Integridad referencial (CouchDB no la impone): no se borra un género
-  // que algún video todavía referencia en `genre_ids`.
-  const videos = await videoRepo.list();
-  const used = videos.filter((v) => (v.genre_ids || []).includes(id));
-  if (used.length > 0) {
-    throw conflict(
-      `No se puede eliminar: ${used.length} video(s) referencian este género.`,
-      { video_ids: used.map((v) => v._id) }
-    );
-  }
-  return genreRepo.remove(id);
+  return genreRepo.update(id, (doc) => {
+    doc.active = false;
+    return doc;
+  });
 }
 
-module.exports = { create, list, getById, update, remove };
+async function activate(id) {
+  await genreRepo.getById(id); // 404 si no existe
+  return genreRepo.update(id, (doc) => {
+    doc.active = true;
+    return doc;
+  });
+}
+
+module.exports = { create, list, getById, update, deactivate, activate };

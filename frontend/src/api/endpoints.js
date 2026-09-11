@@ -19,7 +19,10 @@ export const listGenres = () => data(api.get('/genres'));
 export const getGenre = (id) => data(api.get(`/genres/${id}`));
 export const createGenre = (body) => data(api.post('/genres', body));
 export const updateGenre = (id, body) => data(api.put(`/genres/${id}`, body));
-export const deleteGenre = (id) => data(api.delete(`/genres/${id}`));
+// Sin DELETE: el género se desactiva/reactiva (soft delete), nunca se
+// borra de verdad. Ver CLAUDE.md — el enunciado nunca pide "eliminar".
+export const deactivateGenre = (id) => data(api.patch(`/genres/${id}/deactivate`));
+export const activateGenre = (id) => data(api.patch(`/genres/${id}/activate`));
 
 // --- Videos (peliculas) ---
 // App de un solo propietario: se pide un limite amplio para traer todo el

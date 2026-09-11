@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import * as API from '../api/endpoints.js';
 import { useRefData } from '../context/RefDataContext.jsx';
-import { PageHeader, Card, Button, Spinner, Alert, Field, TextInput } from '../components/ui.jsx';
+import { PageHeader, Card, Button, Spinner, Alert, Field, TextInput, Badge } from '../components/ui.jsx';
 import StringListField from '../components/StringListField.jsx';
 import { toDateInput, fromDateInput } from '../lib/format.js';
 
@@ -213,6 +213,12 @@ export default function VideoFormPage() {
             </span>
             <div className="grid gap-2 border-2 border-ink p-3 sm:grid-cols-2 lg:grid-cols-3">
               {[...genres]
+                // Un género inactivo ya no se puede asignar a películas
+                // nuevas ni agregarlo en una edición — se excluye del
+                // selector. Excepción: si esta película YA lo tenía
+                // asignado, se sigue mostrando (con badge) para no
+                // ocultarle al usuario un dato que el video ya tiene.
+                .filter((g) => g.active !== false || form.genre_ids.includes(g._id))
                 .sort((a, b) => a.name.localeCompare(b.name))
                 .map((g) => (
                   <label key={g._id} className="flex items-center gap-2 text-sm">
@@ -223,11 +229,15 @@ export default function VideoFormPage() {
                       onChange={() => toggleGenre(g._id)}
                     />
                     {g.name}
+                    {g.active === false && (
+                      <Badge tone="soft">Inactivo</Badge>
+                    )}
                   </label>
                 ))}
             </div>
             <span className="mt-1 block text-xs text-ink-soft">
-              Selecciona al menos uno. Una película puede tener varios géneros.
+              Selecciona al menos uno. Una película puede tener varios géneros. Los géneros
+              inactivos no aparecen aquí salvo que la película ya los tenga asignados.
             </span>
           </div>
 

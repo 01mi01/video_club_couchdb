@@ -46,6 +46,8 @@ const genreService = require('../services/genreService');
 const clientService = require('../services/clientService');
 const videoService = require('../services/videoService');
 const loanService = require('../services/loanService');
+const configService = require('../services/configService');
+const pricing = require('../services/pricing');
 
 // Marca única para esta corrida: permite identificar y limpiar sin ambigüedad.
 const RUN = `TEST_DELETE_ME_${Date.now()}_${Math.floor(Math.random() * 1e6)}`;
@@ -95,7 +97,12 @@ async function countById(id) {
 }
 
 /* ===========================================================================
- * 1) GÉNEROS  — CRUD completo (es la única entidad con endpoint DELETE real)
+ * 1) GÉNEROS  — CREATE/UPDATE + DESACTIVAR/REACTIVAR (soft delete).
+ *
+ *    Ya NO existe ningún DELETE real para género (ni para ninguna otra
+ *    entidad del sistema): el enunciado nunca pide "eliminar", solo "dar
+ *    de baja" copias y "bloquear" clientes, ambos no-destructivos. Género
+ *    sigue ese mismo patrón con `active: boolean` (ver genreService.js).
  * ======================================================================== */
 async function testGenres() {
   console.log('\n── GÉNEROS ─────────────────────────────────────────────');
@@ -111,6 +118,7 @@ async function testGenres() {
     assert(fromDb, 'el GET tras crear devolvió null (no se persistió)');
     assert(fromDb.name === `${RUN}_genero`, 'el name persistido no coincide');
     assert(fromDb.type === 'genre', '`type` incorrecto en el documento');
+    assert(fromDb.active === true, 'un género nuevo debería nacer `active: true`');
     return `_id=${genre._id}`;
   });
 
@@ -130,12 +138,40 @@ async function testGenres() {
     return `name actualizado; documentos con ese _id = ${n}`;
   });
 
-  await step('genero', 'DELETE (desaparece de verdad)', async () => {
-    await genreService.remove(genre._id);
+  await step('genero', 'DESACTIVAR (soft delete: el documento NO desaparece)', async () => {
+    await genreService.deactivate(genre._id);
     const fromDb = await rawGet(genre._id);
-    assert(fromDb === null, 'el GET tras DELETE todavía devuelve el documento');
-    created.genres = created.genres.filter((id) => id !== genre._id);
-    return 'GET posterior => 404';
+    assert(fromDb !== null, 'el género desapareció tras desactivar (no debería: no hay DELETE real)');
+    assert(fromDb.active === false, 'el género no quedó marcado `active: false`');
+    return 'documento sigue existiendo; active=false';
+  });
+
+  await step('genero', 'Género inactivo: rechazado en un video NUEVO', async () => {
+    let rejected = false;
+    try {
+      const v = await videoService.create({
+        display_title: `${RUN} Video con género inactivo`,
+        duration_minutes: 90,
+        genre_ids: [genre._id],
+        release_year: 2000,
+        main_actors: [`${RUN} Actor`],
+        unit_cost: 10,
+        units_acquired: 1,
+      });
+      created.videos.push(v._id); // por si acaso se permitiera por error
+    } catch (err) {
+      rejected = true;
+      assert(err.statusCode === 400, `se esperaba 400, llegó ${err.statusCode}`);
+    }
+    assert(rejected, 'PROBLEMA: se permitió asignar un género inactivo a un video nuevo');
+    return 'rechazado correctamente';
+  });
+
+  await step('genero', 'REACTIVAR', async () => {
+    await genreService.activate(genre._id);
+    const fromDb = await rawGet(genre._id);
+    assert(fromDb.active === true, 'el género no quedó reactivado');
+    return 'active=true';
   });
 }
 
@@ -268,6 +304,56 @@ async function testVideos() {
     return `copia ${target.copy_id} dada de baja`;
   });
 
+  await step(
+    'video',
+    'Género YA asociado que se vuelve inactivo: la edición del video lo sigue mostrando',
+    async () => {
+      await genreService.deactivate(genre._id);
+      // (a) editar un campo sin tocar `genre_ids`: no debe re-validarse.
+      await videoService.update(video._id, { duration_minutes: 111 });
+      let fromDb = await rawGet(video._id);
+      assert(fromDb.duration_minutes === 111, 'la edición no se aplicó');
+      assert(
+        (fromDb.genre_ids || []).includes(genre._id),
+        'el video debería seguir mostrando el género inactivo'
+      );
+      // (b) reenviar `genre_ids` conservando el mismo género inactivo: se
+      //     permite, porque no es una asignación NUEVA.
+      await videoService.update(video._id, { genre_ids: [genre._id] });
+      fromDb = await rawGet(video._id);
+      assert(
+        (fromDb.genre_ids || []).includes(genre._id),
+        'se perdió la referencia al género inactivo al reenviar genre_ids'
+      );
+      return 'video editado sin problema pese a tener un género inactivo';
+    }
+  );
+
+  await step(
+    'video',
+    'Género inactivo NUEVO: no se puede AGREGAR a un video existente',
+    async () => {
+      const otro = await genreService.create({
+        name: `${RUN}_genero_video_otro`,
+        description: 'Segundo género auxiliar, se desactiva para la prueba',
+      });
+      created.genres.push(otro._id);
+      await genreService.deactivate(otro._id);
+
+      let rejected = false;
+      try {
+        await videoService.update(video._id, { genre_ids: [genre._id, otro._id] });
+      } catch (err) {
+        rejected = true;
+        assert(err.statusCode === 400, `se esperaba 400, llegó ${err.statusCode}`);
+      }
+      assert(rejected, 'PROBLEMA: se permitió agregar un género inactivo NUEVO a un video existente');
+
+      await genreService.activate(genre._id); // se deja reactivado, no interfiere con lo que sigue
+      return 'rechazado correctamente';
+    }
+  );
+
   await step('video', 'DELETE a nivel repositorio (desaparece de verdad)', async () => {
     await couchRepo.remove(video._id, { label: 'Video' });
     const fromDb = await rawGet(video._id);
@@ -373,6 +459,59 @@ async function testLoans() {
     );
     return `préstamo devuelto; copias liberadas; total factura = ${ret.invoice.total}`;
   });
+
+  // -----------------------------------------------------------------------
+  // 4.a2  DEVOLUCIÓN QUE EXCEDE `max_days`: la tarifa del día máximo
+  //       configurado se cobra por CADA día real, SIN capear a max_days
+  //       (ver `pricing.quoteReturn` / `loanService.returnLoan`).
+  // -----------------------------------------------------------------------
+  await step(
+    'prestamo',
+    'DEVOLUCIÓN > max_days: tarifa del día máximo × días reales (no capea)',
+    async () => {
+      // Config VIGENTE en este momento: nunca se asume un valor fijo, así
+      // el test sigue siendo válido si el propietario reconfiguró precios.
+      const cfg = await configService.effectiveConfig();
+      const maxDays = cfg.max_days;
+      const rate = pricing.maxDayRate(cfg.pricing.price_by_days);
+      const actualDays = maxDays + 2; // se pasa 2 días del máximo configurado
+
+      // Fechas explícitas y fijas (no depende de esperar N días reales):
+      // ambos servicios aceptan `loan_date`/`return_date` en el body.
+      const loanDate = new Date('2020-01-01T00:00:00.000Z').toISOString();
+      const returnDate = new Date(
+        new Date(loanDate).getTime() + actualDays * 24 * 60 * 60 * 1000
+      ).toISOString();
+
+      const res2 = await loanService.createLoan({
+        client_id: client._id,
+        items: [{ video_id: video._id }],
+        days: maxDays, // pactado al máximo permitido en la creación
+        loan_date: loanDate,
+      });
+      created.loans.push(res2.loan._id);
+      created.invoices.push(res2.invoice._id);
+
+      const ret = await loanService.returnLoan(res2.loan._id, { return_date: returnDate });
+
+      // 1 película, sin descuento (moviesCount=1 no entra en ningún tramo).
+      const expectedTotal = pricing.round2(rate * actualDays * 1);
+      assert(
+        ret.invoice.total === expectedTotal,
+        `total esperado ${expectedTotal} Bs (tarifa día máximo ${rate} Bs × ${actualDays} días), ` +
+          `llegó ${ret.invoice.total} Bs`
+      );
+      assert(ret.loan.pricing.overdue === true, 'el breakdown debería marcar `overdue: true`');
+      assert(
+        ret.invoice.note && ret.invoice.note.includes('tarifa del día máximo'),
+        `la nota de la factura no explica la tarifa por exceso de max_days (nota: "${ret.invoice.note}")`
+      );
+      return (
+        `max_days=${maxDays}; actualDays=${actualDays}; tarifa día máx=${rate} Bs; ` +
+        `total cobrado=${expectedTotal} Bs (no ${pricing.round2(rate * maxDays)} Bs, que sería el tope capeado)`
+      );
+    }
+  );
 
   // -----------------------------------------------------------------------
   // 4.b  REGLA DE BLOQUEO

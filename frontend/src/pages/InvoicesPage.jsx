@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAsync } from '../hooks/useAsync.js';
 import * as API from '../api/endpoints.js';
 import { useRefData } from '../context/RefDataContext.jsx';
-import { PageHeader, Card, Button, Spinner, Alert, EmptyState } from '../components/ui.jsx';
+import { PageHeader, Card, Spinner, Alert, EmptyState, IconButton, IconEye } from '../components/ui.jsx';
 import Modal from '../components/Modal.jsx';
 import InvoiceView from '../components/InvoiceView.jsx';
 import { money, dateShort } from '../lib/format.js';
@@ -16,10 +16,7 @@ export default function InvoicesPage() {
 
   return (
     <div>
-      <PageHeader
-        title="Facturas"
-        subtitle="Comprobantes emitidos por cada préstamo. Numeración correlativa."
-      />
+      <PageHeader title="Facturas" />
 
       {loading ? (
         <Spinner />
@@ -38,7 +35,7 @@ export default function InvoicesPage() {
                   <th>Cliente</th>
                   <th>Total</th>
                   <th>Préstamo</th>
-                  <th className="text-right">Acciones</th>
+                  <th className="!text-right">Acciones</th>
                 </tr>
               </thead>
               <tbody>
@@ -59,9 +56,9 @@ export default function InvoicesPage() {
                         </button>
                       </td>
                       <td className="text-right">
-                        <Button size="sm" variant="ghost" onClick={() => setSelected(inv)}>
-                          Ver
-                        </Button>
+                        <IconButton label="Ver factura" onClick={() => setSelected(inv)}>
+                          <IconEye />
+                        </IconButton>
                       </td>
                     </tr>
                   ))}

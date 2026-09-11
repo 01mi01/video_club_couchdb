@@ -31,11 +31,11 @@ export default function LoginPage() {
     <div className="flex min-h-screen items-center justify-center bg-paper px-4">
       <div className="w-full max-w-sm">
         <div className="card overflow-hidden bg-white">
-          <RainbowStripe />
+          <RainbowStripe size="lg" />
           <div className="px-8 py-10">
             <div className="text-center">
-              <h1 className="text-3xl font-bold leading-none text-ink">Video Club</h1>
-              <p className="mt-2 text-sm text-ink-soft">Iniciar sesión</p>
+              <h1 className="text-4xl font-bold leading-none text-ink">Video Club</h1>
+              <p className="mt-3 text-lg font-medium text-ink-soft">Iniciar sesión</p>
             </div>
 
             <form onSubmit={onSubmit} className="mt-8 space-y-4">

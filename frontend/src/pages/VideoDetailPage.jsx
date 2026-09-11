@@ -170,7 +170,7 @@ export default function VideoDetailPage() {
                 <th>Estado</th>
                 <th>Adquirida</th>
                 <th>Baja</th>
-                <th className="text-right">Acciones</th>
+                <th className="!text-right">Acciones</th>
               </tr>
             </thead>
             <tbody>
@@ -290,7 +290,7 @@ export default function VideoDetailPage() {
             </Select>
           </Field>
           {retireForm.reason === 'otro' && (
-            <Field label="Especifica la razón" required>
+            <Field label="Detalle de la razón" required>
               <TextInput
                 value={retireForm.reasonOther}
                 onChange={(e) => setRetireForm({ ...retireForm, reasonOther: e.target.value })}

@@ -58,7 +58,7 @@ api.interceptors.response.use(
       return Promise.reject(new Error('El backend tardo demasiado en responder.'));
     }
     return Promise.reject(
-      new Error('No se pudo contactar el backend en ' + baseURL + '. Verifica que este corriendo.')
+      new Error('No se pudo contactar el backend en ' + baseURL + '. Verifique que esté en ejecución.')
     );
   }
 );

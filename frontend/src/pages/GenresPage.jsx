@@ -2,7 +2,21 @@ import { useState } from 'react';
 import { useAsync } from '../hooks/useAsync.js';
 import { useRefData } from '../context/RefDataContext.jsx';
 import * as API from '../api/endpoints.js';
-import { PageHeader, Card, Button, Spinner, Alert, Field, TextInput, TextArea, EmptyState, Badge } from '../components/ui.jsx';
+import {
+  PageHeader,
+  Card,
+  Button,
+  Spinner,
+  Alert,
+  Field,
+  TextInput,
+  TextArea,
+  EmptyState,
+  Badge,
+  IconButton,
+  IconPencil,
+  IconPower,
+} from '../components/ui.jsx';
 import Modal from '../components/Modal.jsx';
 import ConfirmDialog from '../components/ConfirmDialog.jsx';
 
@@ -81,11 +95,7 @@ export default function GenresPage() {
 
   return (
     <div>
-      <PageHeader
-        title="Géneros"
-        subtitle="Catálogo normalizado. Una película puede pertenecer a varios géneros; aquí se administra el vocabulario."
-        actions={<Button onClick={openNew}>Nuevo género</Button>}
-      />
+      <PageHeader title="Géneros" actions={<Button onClick={openNew}>Nuevo género</Button>} />
 
       {banner && (
         <div className="mb-4">
@@ -100,7 +110,7 @@ export default function GenresPage() {
       ) : error ? (
         <Alert>{error}</Alert>
       ) : genres.length === 0 ? (
-        <EmptyState title="Sin géneros" hint="Crea el primero con “Nuevo género”." />
+        <EmptyState title="Sin géneros" hint="Crear el primero con “Nuevo género”." />
       ) : (
         <Card accent={false}>
           <div className="overflow-x-auto">
@@ -110,7 +120,7 @@ export default function GenresPage() {
                   <th>Nombre</th>
                   <th>Descripción</th>
                   <th className="w-28">Estado</th>
-                  <th className="whitespace-nowrap text-right">Acciones</th>
+                  <th className="!text-right">Acciones</th>
                 </tr>
               </thead>
               <tbody>
@@ -128,17 +138,17 @@ export default function GenresPage() {
                           </Badge>
                         </td>
                         <td className="text-right">
-                          <div className="flex justify-end gap-2">
-                            <Button size="sm" variant="ghost" onClick={() => openEdit(g)}>
-                              Editar
-                            </Button>
-                            <Button
-                              size="sm"
+                          <div className="inline-flex items-center gap-1">
+                            <IconButton label="Editar género" onClick={() => openEdit(g)}>
+                              <IconPencil />
+                            </IconButton>
+                            <IconButton
+                              label={inactive ? 'Activar género' : 'Desactivar género'}
                               variant={inactive ? 'primary' : 'danger'}
                               onClick={() => askToggle(g)}
                             >
-                              {inactive ? 'Activar' : 'Desactivar'}
-                            </Button>
+                              <IconPower />
+                            </IconButton>
                           </div>
                         </td>
                       </tr>

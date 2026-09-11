@@ -2,7 +2,20 @@ import { useState } from 'react';
 import { useAsync } from '../hooks/useAsync.js';
 import { useRefData } from '../context/RefDataContext.jsx';
 import * as API from '../api/endpoints.js';
-import { PageHeader, Card, Button, Spinner, Alert, Field, TextInput, EmptyState, Badge } from '../components/ui.jsx';
+import {
+  PageHeader,
+  Card,
+  Button,
+  Spinner,
+  Alert,
+  Field,
+  TextInput,
+  EmptyState,
+  Badge,
+  IconButton,
+  IconPencil,
+  IconPower,
+} from '../components/ui.jsx';
 import Modal from '../components/Modal.jsx';
 import ConfirmDialog from '../components/ConfirmDialog.jsx';
 
@@ -83,11 +96,7 @@ export default function OscarCategoriesPage() {
 
   return (
     <div>
-      <PageHeader
-        title="Categorías de Oscar"
-        subtitle="Catálogo normalizado (inglés + español). Los videos referencian estas categorías por id en oscar_nominations[] / oscar_wins[]."
-        actions={<Button onClick={openNew}>Nueva categoría</Button>}
-      />
+      <PageHeader title="Categorías de Oscar" actions={<Button onClick={openNew}>Nueva categoría</Button>} />
 
       {banner && (
         <div className="mb-4">
@@ -102,7 +111,7 @@ export default function OscarCategoriesPage() {
       ) : error ? (
         <Alert>{error}</Alert>
       ) : categories.length === 0 ? (
-        <EmptyState title="Sin categorías" hint="Crea la primera con “Nueva categoría”." />
+        <EmptyState title="Sin categorías" hint="Crear la primera con “Nueva categoría”." />
       ) : (
         <Card accent={false}>
           <div className="overflow-x-auto">
@@ -112,7 +121,7 @@ export default function OscarCategoriesPage() {
                   <th>Español</th>
                   <th>Inglés</th>
                   <th className="w-28">Estado</th>
-                  <th className="whitespace-nowrap text-right">Acciones</th>
+                  <th className="!text-right">Acciones</th>
                 </tr>
               </thead>
               <tbody>
@@ -130,17 +139,17 @@ export default function OscarCategoriesPage() {
                           </Badge>
                         </td>
                         <td className="text-right">
-                          <div className="flex justify-end gap-2">
-                            <Button size="sm" variant="ghost" onClick={() => openEdit(c)}>
-                              Editar
-                            </Button>
-                            <Button
-                              size="sm"
+                          <div className="inline-flex items-center gap-1">
+                            <IconButton label="Editar categoría" onClick={() => openEdit(c)}>
+                              <IconPencil />
+                            </IconButton>
+                            <IconButton
+                              label={inactive ? 'Activar categoría' : 'Desactivar categoría'}
                               variant={inactive ? 'primary' : 'danger'}
                               onClick={() => askToggle(c)}
                             >
-                              {inactive ? 'Activar' : 'Desactivar'}
-                            </Button>
+                              <IconPower />
+                            </IconButton>
                           </div>
                         </td>
                       </tr>

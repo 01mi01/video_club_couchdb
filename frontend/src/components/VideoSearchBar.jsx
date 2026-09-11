@@ -38,7 +38,7 @@ export default function VideoSearchBar({ onSearch, onClear, busy }) {
         </Field>
         <Field label="Género">
           <Select value={f.genreId} onChange={(e) => setF({ ...f, genreId: e.target.value })}>
-            <option value="">— cualquiera —</option>
+            <option value="">Todos los géneros</option>
             {[...genres]
               .sort((a, b) => a.name.localeCompare(b.name))
               .map((g) => (
@@ -52,15 +52,15 @@ export default function VideoSearchBar({ onSearch, onClear, busy }) {
           <TextInput
             value={f.actor}
             onChange={(e) => setF({ ...f, actor: e.target.value })}
-            placeholder="ej. Song Kang-ho"
+            placeholder="ej. Cate Blanchett"
           />
         </Field>
-        <Field label="Nominación al Oscar" hint="Busca en español o en inglés indistintamente">
+        <Field label="Nominación al Oscar" hint="Funciona en español o en inglés indistintamente">
           <Select
             value={f.oscarNomination}
             onChange={(e) => setF({ ...f, oscarNomination: e.target.value })}
           >
-            <option value="">— cualquiera —</option>
+            <option value="">Todas las categorías</option>
             {[...oscarCategories]
               .sort((a, b) => a.name_es.localeCompare(b.name_es))
               .map((c) => (

@@ -183,7 +183,6 @@ export default function ConfigPage() {
     <div>
       <PageHeader
         title="Configuración"
-        subtitle="Precio por día de préstamo y descuentos por cantidad de películas. Ambos se pueden modificar en cualquier momento."
         actions={dirty ? <Badge tone="gold">Cambios sin guardar</Badge> : undefined}
       />
 
@@ -266,7 +265,7 @@ export default function ConfigPage() {
           </div>
           <p className="mb-4 text-sm text-ink-soft">
             Un tramo dice: "si el cliente lleva ENTRE tantas Y tantas películas en el mismo
-            préstamo, aplica tal % de descuento sobre el total". Puedes tener varios tramos.
+            préstamo, aplica tal % de descuento sobre el total". Puede haber varios tramos.
           </p>
 
           {discMsg && (
@@ -361,8 +360,8 @@ export default function ConfigPage() {
       <Card className="mt-4" accent={false}>
         <h2 className="text-lg font-semibold">Vista previa de la tabla vigente</h2>
         <p className="mb-3 text-xs text-ink-soft">
-          Esto es lo que un préstamo nuevo va a cobrar HOY, según lo guardado (no según lo que
-          estés editando arriba sin guardar todavía).
+          Esto es lo que un préstamo nuevo va a cobrar HOY, según lo guardado (no según cambios sin
+          guardar que aún estén en edición arriba).
         </p>
         <div className="grid gap-6 sm:grid-cols-2">
           <div>
@@ -398,7 +397,7 @@ export default function ConfigPage() {
       <ConfirmDialog
         open={!!pendingNav}
         title="Cambios sin guardar"
-        message="Tienes cambios sin guardar en Configuración. Si sales ahora, se van a perder."
+        message="Existen cambios sin guardar en Configuración. Si se sale ahora, se perderán."
         confirmLabel="Salir sin guardar"
         cancelLabel="Seguir editando"
         danger

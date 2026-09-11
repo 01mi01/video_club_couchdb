@@ -3,7 +3,7 @@ import { createContext, useContext, useCallback, useRef } from 'react';
 /**
  * Permite que una pantalla con cambios sin guardar (ej. Configuración)
  * INTERCEPTE la navegación disparada por el sidebar, para poder mostrar
- * su propio aviso ("tienes cambios sin guardar") antes de salir.
+ * su propio aviso ("existen cambios sin guardar") antes de salir.
  *
  * LIMITACIÓN HONESTA: esta app usa `<Routes>` declarativo (no un "data
  * router" vía `createBrowserRouter`), así que el `useBlocker` nativo de

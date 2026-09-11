@@ -25,7 +25,7 @@ export default function Sidebar({ onNavigate }) {
       <div className="px-4 py-5">
         <h1 className="text-lg font-bold leading-none text-ink">Video Club</h1>
       </div>
-      <RainbowStripe />
+      <RainbowStripe size="lg" />
 
       <nav className="flex-1 overflow-y-auto p-2.5">
         <ul className="space-y-0.5">

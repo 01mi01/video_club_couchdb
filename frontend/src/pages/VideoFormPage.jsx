@@ -145,11 +145,6 @@ export default function VideoFormPage() {
     <div>
       <PageHeader
         title={isEdit ? 'Editar película' : 'Nueva película'}
-        subtitle={
-          isEdit
-            ? 'La edición cambia solo los metadatos; las copias se administran desde el detalle.'
-            : 'Al registrar se generan automáticamente las copias iniciales según las unidades adquiridas.'
-        }
         actions={
           <Button variant="ghost" onClick={() => navigate(-1)}>
             Volver
@@ -269,7 +264,7 @@ export default function VideoFormPage() {
                 ))}
             </div>
             <span className="mt-1 block text-xs text-ink-soft">
-              Selecciona al menos uno. Una película puede tener varios géneros. Los géneros
+              Seleccionar al menos uno. Una película puede tener varios géneros. Los géneros
               inactivos no aparecen aquí salvo que la película ya los tenga asignados.
             </span>
           </div>
@@ -279,7 +274,7 @@ export default function VideoFormPage() {
               label="Actores principales"
               value={form.main_actors}
               onChange={(v) => set({ main_actors: v })}
-              placeholder="ej. Song Kang-ho"
+              placeholder="ej. Meryl Streep, Denzel Washington"
             />
           </div>
         </Card>

@@ -27,15 +27,15 @@ function messageFor(el) {
   const v = el.validity;
   if (v.valueMissing) return 'Este campo es obligatorio.';
   if (v.typeMismatch) {
-    if (el.type === 'email') return 'Ingresa un correo electrónico válido.';
-    if (el.type === 'url') return 'Ingresa una dirección web (URL) válida.';
+    if (el.type === 'email') return 'Debe ingresarse un correo electrónico válido.';
+    if (el.type === 'url') return 'Debe ingresarse una dirección web (URL) válida.';
     return 'El valor ingresado no tiene un formato válido.';
   }
   if (v.tooShort) return `Debe tener al menos ${el.minLength} caracteres.`;
   if (v.tooLong) return `Debe tener como máximo ${el.maxLength} caracteres.`;
   if (v.rangeUnderflow) return `El valor debe ser mayor o igual a ${el.min}.`;
   if (v.rangeOverflow) return `El valor debe ser menor o igual a ${el.max}.`;
-  if (v.stepMismatch) return 'El valor no es válido para este campo (revisa los decimales permitidos).';
+  if (v.stepMismatch) return 'El valor no es válido para este campo (verificar los decimales permitidos).';
   if (v.patternMismatch) return 'El formato ingresado no es válido.';
   if (v.badInput) return 'No se pudo interpretar el valor ingresado.';
   return el.validationMessage || 'Este campo no es válido.';

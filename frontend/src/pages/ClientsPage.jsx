@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAsync } from '../hooks/useAsync.js';
 import * as API from '../api/endpoints.js';
-import { PageHeader, Card, Button, Spinner, Alert, Badge, EmptyState, TextInput } from '../components/ui.jsx';
+import { PageHeader, Card, Button, Spinner, Alert, Badge, EmptyState, TextInput, IconButton, IconEye, IconPencil } from '../components/ui.jsx';
 import { fullName, dateShort } from '../lib/format.js';
 
 export default function ClientsPage() {
@@ -28,7 +28,6 @@ export default function ClientsPage() {
     <div>
       <PageHeader
         title="Clientes"
-        subtitle="Registro de clientes del videoclub. Los clientes bloqueados no pueden rentar películas."
         actions={<Button onClick={() => navigate('/clientes/nuevo')}>Nuevo cliente</Button>}
       />
 
@@ -47,7 +46,7 @@ export default function ClientsPage() {
           </div>
 
           {rows.length === 0 ? (
-            <EmptyState title="Sin clientes" hint="Registra el primero con “Nuevo cliente”." />
+            <EmptyState title="Sin clientes" hint="Registrar el primero con “Nuevo cliente”." />
           ) : (
             <Card accent={false}>
               <div className="overflow-x-auto">
@@ -60,7 +59,7 @@ export default function ClientsPage() {
                       <th>Dirección</th>
                       <th>Registro</th>
                       <th>Estado</th>
-                      <th className="text-right">Acciones</th>
+                      <th className="!text-right">Acciones</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -88,21 +87,19 @@ export default function ClientsPage() {
                           )}
                         </td>
                         <td className="text-right">
-                          <div className="flex justify-end gap-2">
-                            <Button
-                              size="sm"
-                              variant="ghost"
+                          <div className="inline-flex items-center gap-1">
+                            <IconButton
+                              label="Ver cliente"
                               onClick={() => navigate(`/clientes/${c._id}`)}
                             >
-                              Ver
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="ghost"
+                              <IconEye />
+                            </IconButton>
+                            <IconButton
+                              label="Editar cliente"
                               onClick={() => navigate(`/clientes/${c._id}/editar`)}
                             >
-                              Editar
-                            </Button>
+                              <IconPencil />
+                            </IconButton>
                           </div>
                         </td>
                       </tr>

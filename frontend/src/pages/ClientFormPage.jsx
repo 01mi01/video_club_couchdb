@@ -94,7 +94,6 @@ export default function ClientFormPage() {
     <div>
       <PageHeader
         title={isEdit ? 'Editar cliente' : 'Nuevo cliente'}
-        subtitle="El bloqueo/desbloqueo se gestiona desde el detalle del cliente."
         actions={
           <Button variant="ghost" onClick={() => navigate(-1)}>
             Volver

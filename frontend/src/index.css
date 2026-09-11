@@ -28,9 +28,16 @@
 @layer components {
   /* Motivo grafico de marca: franja en lineas rectas, de azul oscuro a
      naranja-rojizo. Se conserva como acento estructural (headers,
-     tarjetas destacadas), no en cada componente. */
+     tarjetas destacadas), no en cada componente.
+
+     Grosor CONTEXTUAL (no un tamaño único):
+       - lg (10px): bordes rectos (header del sidebar) y el login (ahí,
+         aunque la tarjeta es redondeada, se ve bien grande a propósito).
+       - md (6px, DEFAULT): el resto de tarjetas/headers con esquinas
+         redondeadas (Card, PageHeader, Modal, factura).
+       - sm (4px): Dashboard — más delgada que en el resto del sitio. */
   .rainbow-stripe {
-    height: 4px;
+    height: 6px; /* md: default */
     width: 100%;
     background: linear-gradient(
       to right,
@@ -46,14 +53,19 @@
       #c1502e 100%
     );
   }
-  .rainbow-stripe-thin {
-    height: 2px;
+  .rainbow-stripe-lg {
+    height: 10px;
+  }
+  .rainbow-stripe-sm {
+    height: 4px;
   }
 
   /* Tarjetas: bordes suaves y redondeados, sombra ligera — panel de
      administracion moderno, ya no el bloque de borde grueso "editorial". */
   .card {
-    @apply rounded-xl border border-ink-line bg-white shadow-card;
+    /* overflow-hidden: recorta la franja de color (ahora más gruesa) a las
+       esquinas redondeadas, si no queda un borde recto feo encima. */
+    @apply overflow-hidden rounded-xl border border-ink-line bg-white shadow-card;
   }
 
   .btn {

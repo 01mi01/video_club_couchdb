@@ -12,6 +12,8 @@ import {
   Badge,
   EmptyState,
   loanStatusTone,
+  IconButton,
+  IconEye,
 } from '../components/ui.jsx';
 import { dateShort, money, daysOverdue, LOAN_STATUS_LABEL } from '../lib/format.js';
 
@@ -40,7 +42,6 @@ export default function LoansPage() {
     <div>
       <PageHeader
         title="Préstamos"
-        subtitle="Registro de préstamos. Cada préstamo emite una factura. La devolución tardía se cobra según la fecha real."
         actions={<Button onClick={() => navigate('/prestamos/nuevo')}>Nuevo préstamo</Button>}
       />
 
@@ -63,7 +64,7 @@ export default function LoansPage() {
       ) : error ? (
         <Alert>{error}</Alert>
       ) : rows.length === 0 ? (
-        <EmptyState title="Sin préstamos" hint="Registra uno con “Nuevo préstamo”." />
+        <EmptyState title="Sin préstamos" hint="Registrar uno con “Nuevo préstamo”." />
       ) : (
         <Card accent={false}>
           <div className="overflow-x-auto">
@@ -77,7 +78,7 @@ export default function LoansPage() {
                   <th>Vence</th>
                   <th>Total</th>
                   <th>Estado</th>
-                  <th className="text-right">Acciones</th>
+                  <th className="!text-right">Acciones</th>
                 </tr>
               </thead>
               <tbody>
@@ -113,13 +114,9 @@ export default function LoansPage() {
                         </Badge>
                       </td>
                       <td className="text-right">
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => navigate(`/prestamos/${l._id}`)}
-                        >
-                          Ver
-                        </Button>
+                        <IconButton label="Ver préstamo" onClick={() => navigate(`/prestamos/${l._id}`)}>
+                          <IconEye />
+                        </IconButton>
                       </td>
                     </tr>
                   );

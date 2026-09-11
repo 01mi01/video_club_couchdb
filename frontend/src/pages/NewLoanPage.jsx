@@ -146,7 +146,6 @@ export default function NewLoanPage() {
     <div>
       <PageHeader
         title="Nuevo préstamo"
-        subtitle="Elige el cliente, busca y agrega películas, fija el plazo, revisa la cotización y emite la factura."
         actions={
           <Button variant="ghost" onClick={() => navigate('/prestamos')}>
             Volver
@@ -161,7 +160,7 @@ export default function NewLoanPage() {
             <h2 className="mb-3 text-xl font-semibold">1 · Cliente</h2>
             <Field label="Cliente" required>
               <Select value={clientId} onChange={(e) => setClientId(e.target.value)}>
-                <option value="">— selecciona —</option>
+                <option value="">— seleccionar —</option>
                 {[...clients]
                   .sort((a, b) => fullName(a).localeCompare(fullName(b)))
                   .map((c) => (
@@ -196,7 +195,7 @@ export default function NewLoanPage() {
               <Spinner label="Buscando…" />
             ) : searchRows === null ? (
               <p className="mt-3 text-sm text-ink-soft">
-                Busca por nombre, género, actor o nominación al Oscar para agregar películas.
+                Buscar por nombre, género, actor o nominación al Oscar para agregar películas.
               </p>
             ) : searchRows.length === 0 ? (
               <p className="mt-3 text-sm text-ink-soft">Sin resultados.</p>
@@ -288,7 +287,7 @@ export default function NewLoanPage() {
           <Card>
             <h2 className="mb-3 text-xl font-semibold">Resumen</h2>
             {cart.length === 0 ? (
-              <EmptyState title="Sin películas" hint="Agrega desde el buscador." />
+              <EmptyState title="Sin películas" hint="Agregar desde el buscador." />
             ) : (
               <ul className="space-y-2 text-sm">
                 {cart.map((i) => (
@@ -340,7 +339,7 @@ export default function NewLoanPage() {
               )}
               {!quote && !quoting && !quoteErr && (
                 <p className="text-sm text-ink-soft">
-                  Completa cliente, películas y plazo para ver la cotización.
+                  Completar cliente, películas y plazo para ver la cotización.
                 </p>
               )}
             </div>

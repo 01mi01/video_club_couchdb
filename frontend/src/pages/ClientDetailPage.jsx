@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { useAsync } from '../hooks/useAsync.js';
 import * as API from '../api/endpoints.js';
 import { useRefData } from '../context/RefDataContext.jsx';
@@ -13,6 +13,8 @@ import {
   Field,
   TextInput,
   loanStatusTone,
+  IconButton,
+  IconEye,
 } from '../components/ui.jsx';
 import ConfirmDialog from '../components/ConfirmDialog.jsx';
 import { fullName, dateShort, money, LOAN_STATUS_LABEL } from '../lib/format.js';
@@ -41,7 +43,7 @@ export default function ClientDetailPage() {
 
   function askBlock() {
     if (!reason.trim()) {
-      setBanner({ kind: 'error', msg: 'Indica la razón del bloqueo.' });
+      setBanner({ kind: 'error', msg: 'Debe indicarse la razón del bloqueo.' });
       return;
     }
     setConfirmErr(null);
@@ -205,7 +207,7 @@ export default function ClientDetailPage() {
                   <th>Vence</th>
                   <th>Total</th>
                   <th>Estado</th>
-                  <th></th>
+                  <th className="!text-right">Acciones</th>
                 </tr>
               </thead>
               <tbody>
@@ -224,9 +226,9 @@ export default function ClientDetailPage() {
                         </Badge>
                       </td>
                       <td className="text-right">
-                        <Link className="text-xs underline hover:text-teal" to={`/prestamos/${l._id}`}>
-                          Ver
-                        </Link>
+                        <IconButton label="Ver préstamo" onClick={() => navigate(`/prestamos/${l._id}`)}>
+                          <IconEye />
+                        </IconButton>
                       </td>
                     </tr>
                   ))}

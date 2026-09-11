@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import * as API from '../api/endpoints.js';
 import { useRefData } from '../context/RefDataContext.jsx';
-import { PageHeader, Card, Button, Spinner, Alert, Badge, EmptyState } from '../components/ui.jsx';
+import { PageHeader, Card, Button, Spinner, Alert, Badge, EmptyState, IconButton, IconEye, IconPencil } from '../components/ui.jsx';
 import VideoSearchBar from '../components/VideoSearchBar.jsx';
 import { money } from '../lib/format.js';
 
@@ -60,7 +60,6 @@ export default function VideosPage() {
     <div>
       <PageHeader
         title="Películas"
-        subtitle="Catálogo de videos. Búsqueda por nombre, género, actor o nominación al Oscar (índices Mango)."
         actions={<Button onClick={() => navigate('/videos/nuevo')}>Nueva película</Button>}
       />
 
@@ -91,7 +90,7 @@ export default function VideosPage() {
       ) : rows.length === 0 ? (
         <EmptyState
           title={mode === 'search' ? 'Sin resultados' : 'Catálogo vacío'}
-          hint={mode === 'search' ? 'Ajusta los criterios de búsqueda.' : 'Registra la primera película.'}
+          hint={mode === 'search' ? 'Ajustar los criterios de búsqueda.' : 'Registrar la primera película.'}
         />
       ) : (
         <Card accent={false}>
@@ -104,7 +103,7 @@ export default function VideosPage() {
                   <th>Géneros</th>
                   <th>Duración</th>
                   <th>Copias</th>
-                  <th className="text-right">Acciones</th>
+                  <th className="!text-right">Acciones</th>
                 </tr>
               </thead>
               <tbody>
@@ -137,17 +136,16 @@ export default function VideosPage() {
                         {s.baja > 0 && <span className="text-rust"> / {s.baja} baja</span>}
                       </td>
                       <td className="text-right">
-                        <div className="flex justify-end gap-2">
-                          <Button size="sm" variant="ghost" onClick={() => navigate(`/videos/${v._id}`)}>
-                            Ver
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="ghost"
+                        <div className="inline-flex items-center gap-1">
+                          <IconButton label="Ver película" onClick={() => navigate(`/videos/${v._id}`)}>
+                            <IconEye />
+                          </IconButton>
+                          <IconButton
+                            label="Editar película"
                             onClick={() => navigate(`/videos/${v._id}/editar`)}
                           >
-                            Editar
-                          </Button>
+                            <IconPencil />
+                          </IconButton>
                         </div>
                       </td>
                     </tr>

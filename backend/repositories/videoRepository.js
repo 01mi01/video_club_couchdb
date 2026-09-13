@@ -1,84 +1,3 @@
-/**
- * Repositorio de VIDEOS (películas).
- *
- * MODELO (decidido aquí, según lo permite el enunciado):
- *
- *   {
- *     _id: "video:<uuid>", type: "video",
- *
- *     // --- Títulos -------------------------------------------------------
- *     // El enunciado pide "título con varios alternativos, incluyendo en
- *     // idioma original y en inglés". Se guardan estructurados...
- *     //
- *     // SIMPLIFICACIÓN DE MODELO: no hay un campo `english_title` separado
- *     // — resultaba redundante con `alternative_titles[]` (un título en
- *     // inglés es, para el modelo, un título alternativo más entre otros).
- *     // Se migró con `scripts/migrate-video-titles.js` (mueve cualquier
- *     // valor real de `english_title` a `alternative_titles[]` antes de
- *     // borrar el campo — ver ese script para el detalle y la
- *     // verificación documento por documento).
- *     display_title:      "string",      // el título principal para mostrar
- *     original_title:     "string",
- *     original_language:  "string",      // idioma original
- *     alternative_titles: ["string", ...],
- *     director:            "string" | null, // opcional — ver comentario en
- *                                             // videoService.normalizeVideoInput
- *     // ...y ADEMÁS dos arreglos planos denormalizados con TODOS los
- *     // títulos, recalculados en cada escritura:
- *     //   all_titles    -> para MOSTRAR (tal cual, con acentos/mayúsculas).
- *     //   search_titles -> para BUSCAR: cada título "plegado" (Unicode NFD,
- *     //                    sin marcas diacríticas, en minúsculas). Es este
- *     //                    el que indexa Mango (idx-search-titles), porque
- *     //                    `$regex` no compara insensible a acentos y el
- *     //                    enunciado exige buscar por nombre en español.
- *     //                    Ver `foldForSearch` en services/videoService.js.
- *     all_titles:    ["string", ...],
- *     search_titles: ["string", ...],
- *
- *     duration_minutes: number,          // duración en minutos
- *     genre_ids: ["genre:<uuid>", ...],  // REFERENCIA a géneros normalizados
- *     release_year: number,
- *
- *     // --- Oscar --------------------------------------------------------
- *     // REFERENCIA a categorías normalizadas (oscar_category), NO strings
- *     // libres. Antes eran strings en inglés ("Best Picture"), lo que
- *     // rompía la búsqueda en español ("Mejor Película"). Mismo patrón
- *     // que género: documento propio con `name_en`/`name_es`, referenciado
- *     // por ID (ver repositories/oscarCategoryRepository.js).
- *     oscar_nominations: ["oscar_category:<uuid>", ...],
- *     oscar_wins:        ["oscar_category:<uuid>", ...],
- *
- *     main_actors: ["string", ...],      // arreglo plano -> indexable
- *
- *     unit_cost: number,                 // costo unitario de cada DVD
- *     units_acquired: number,            // nº de unidades adquiridas (total histórico)
- *
- *     // --- Copias EMBEBIDAS -------------------------------------------
- *     // Se embeben porque una copia no tiene vida propia fuera de su
- *     // película y la relación es 1-a-muchos (no muchos-a-muchos). Evita
- *     // un JOIN que CouchDB no hace bien.
- *     copies: [
- *       { copy_id: "c1", acquisition_date: "ISO",
- *         status: "available" | "loaned" | "missing" | "retired",
- *         retirement: null | { date: "ISO", reason: "no devuelto" | "robo" | ...,
- *                               loan_id?: "loan:<uuid>" } }
- *     ],
- *     // ESTADOS DE COPIA (ver videoService.retireCopy / recoverCopy):
- *     //   available -> en tienda, se puede prestar.
- *     //   loaned    -> con un cliente en este momento.
- *     //   missing   -> NO se devolvió a tiempo (razón "no devuelto",
- *     //     "pérdida" o "robo" mientras estaba prestada). NO ES TERMINAL:
- *     //     la copia puede aparecer más adelante -> se puede RECUPERAR
- *     //     (vuelve a "available") o darse de baja definitiva ("retired")
- *     //     si el propietario decide que ya no vale la pena esperarla.
- *     //   retired   -> baja DEFINITIVA, sin vuelta atrás (ej. "daño
- *     //     irreparable" tras devolverse, o una copia "missing" que el
- *     //     propietario decide dar por perdida para siempre).
- *
- *     created_at, updated_at
- *   }
- */
-
 const repo = require('./couchRepository');
 const TYPE = 'video';
 
@@ -90,8 +9,7 @@ module.exports = {
   list: (opts) => repo.listByType(TYPE, opts),
   update: (id, mutator) => repo.updateWithRetry(id, mutator, { label: 'Video' }),
   remove: (id) => repo.remove(id, { label: 'Video' }),
-
-  // Búsqueda Mango: el `selector` ya viene armado desde el servicio para
-  // dejar claro allí qué índice se está aprovechando.
+  // El selector Mango ya viene armado desde videoService, que deja claro
+  // qué índice se está aprovechando.
   find: (selector, options) => repo.find(selector, options),
 };

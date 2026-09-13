@@ -1,41 +1,8 @@
 /**
- * ============================================================================
- * Servicio de PRÉSTAMOS — Gestión de Préstamos del enunciado
- * ============================================================================
- *
- * Cubre:
- *   - Registrar el préstamo de una o varias películas.
- *   - Registrar fecha de devolución y calcular el importe.
- *   - Emitir factura con el importe total.
- *   - Reglas: cliente no bloqueado, copias disponibles, plazo <= máximo
- *     configurado, descuentos por cantidad.
- *   - Devolución de películas (libera copias, recalcula por fecha real).
- *
- * ----------------------------------------------------------------------------
- * POR QUÉ ESTE ARCHIVO ES EL "PROBLEMA COMPLEJO" CENTRAL
- * ----------------------------------------------------------------------------
- * Un préstamo toca VARIOS documentos a la vez:
- *     N documentos de video (marcar copias como prestadas)
- *   + 1 documento de préstamo
- *   + 1 documento de factura
- *
- * CouchDB NO tiene transacciones multi-documento. La herramienta más
- * cercana es `_bulk_docs`, que escribe todo en una sola petición HTTP
- * pero **NO es atómica**: cada documento se aplica por separado y puede
- * fallar solo (típicamente 409 si su `_rev` quedó viejo).
- *
- * Estrategia de PSEUDO-ATOMICIDAD implementada aquí:
- *   1. Ciclo leer-validar-escribir envuelto en `withConflictRetry`.
- *   2. Se lee la versión fresca de TODOS los documentos involucrados.
- *   3. Se validan las reglas de negocio sobre esos datos frescos.
- *   4. Se arma el lote y se manda por `_bulk_docs`.
- *   5. Si el lote vuelve con errores -> COMPENSACIÓN best-effort de lo que
- *      sí se escribió, y se relanza el conflicto para reintentar con
- *      lecturas nuevas.
- *
- * Es honesto sobre la limitación: no es una transacción real, es una
- * secuencia compensable. Se documenta como tal.
- * ============================================================================
+ * Servicio de PRÉSTAMOS: registro (con reglas de cliente/copias/plazo/
+ * descuento) y devolución. Un préstamo toca varios documentos a la vez
+ * (videos + préstamo + factura) vía `_bulk_docs` — ver `createLoan` y
+ * `compensate` para el manejo de escritura parcial.
  */
 
 const clientRepo = require('../repositories/clientRepository');
@@ -49,22 +16,13 @@ const { withConflictRetry } = require('../utils/conflictRetry');
 const { foldForSearch } = require('../utils/textFold');
 const { badRequest, notFound, conflict } = require('../utils/errors');
 
-// "no devuelto" (a secas, sin mencionar robo/pérdida/hurto) SOLO tiene
-// sentido una vez que la fecha de devolución pactada YA PASÓ — es
-// literalmente "no lo devolvió [para cuando debía]". Antes de esa fecha no
-// hay nada que constatar todavía (el préstamo sigue vigente). "robo" y
-// "pérdida" SÍ pueden reportarse en cualquier momento (le pueden robar o
-// perder la copia el mismo día que la lleva, mucho antes de la fecha
-// pactada) — por eso NO se bloquean acá, solo el caso "no devuelto" puro.
-// Palabras equivalentes a las que reconoce `videoService.PERMANENT_REASON`
-// (en sentido inverso: acá se buscan las NO permanentes), separadas en dos
-// grupos para poder distinguir "no devuelto puro" de "robo/pérdida".
+// "no devuelto" a secas solo tiene sentido después de vencido el plazo;
+// "robo"/"pérdida" pueden pasar (y reportarse) en cualquier momento del
+// préstamo. Se separan para poder exigir la fecha de vencimiento solo al
+// primer caso — ver `writeOffUnreturned`.
 const PLAIN_NO_RETURN = /no\s*devuelt|not\s*returned|sin\s*devoluci|no\s*devoluci/i;
 const THEFT_OR_LOSS = /perdid|extravi|lost|rob|hurt/i;
 
-/* ---------------------------------------------------------------------------
- * Resolución de plazo (days <-> due_date)
- * ------------------------------------------------------------------------- */
 function resolveTerm(body, loanDateISO) {
   const loanDate = new Date(loanDateISO);
   if (body.days !== undefined) {
@@ -76,34 +34,26 @@ function resolveTerm(body, loanDateISO) {
   if (body.due_date !== undefined) {
     const due = new Date(body.due_date);
     if (Number.isNaN(due.getTime())) throw badRequest('`due_date` inválida.');
-    // Se rechaza solo si la fecha de devolución cae en un día ANTERIOR al
-    // del préstamo. El MISMO día es válido y se factura como 1 día (mínimo
-    // de la tabla). Se compara por día de calendario, no por hora.
     if (pricing.calendarDayIndex(due.toISOString()) < pricing.calendarDayIndex(loanDateISO)) {
       throw badRequest('`due_date` no puede ser anterior al día del préstamo.');
     }
-    // Días de CALENDARIO (no por milisegundos): elegir "jueves" cuando se
-    // presta el "lunes" son 3 días; el mismo día son 1. Así la pantalla
-    // "por fecha" es predecible. Ver `pricing.calendarDaysBetween`.
+    // Días de calendario, no de milisegundos: prestar el lunes y devolver
+    // el jueves son 3 días; el mismo día es 1. Ver pricing.calendarDaysBetween.
     const days = pricing.calendarDaysBetween(loanDateISO, due.toISOString());
     return { days, due_date: due.toISOString() };
   }
   throw badRequest('Indica `days` o `due_date`.');
 }
 
-/* ---------------------------------------------------------------------------
- * Selección de copias disponibles por video
- * ------------------------------------------------------------------------- *
- * `items` puede repetir el mismo `video_id` (cliente que lleva 2 copias de
- * la misma peli). Se agrupa por video y se asignan copias distintas.
- * Devuelve: { videoDoc, assignments:[{copy_id}], ... } por cada video.
- * ------------------------------------------------------------------------- */
+/**
+ * Asigna copias disponibles por video. `items` puede repetir el mismo
+ * `video_id` (llevar 2 copias de la misma película).
+ */
 async function planAssignments(items) {
   if (!Array.isArray(items) || items.length === 0) {
     throw badRequest('El préstamo debe incluir al menos una película en `items`.');
   }
 
-  // Agrupar solicitudes por video.
   const byVideo = new Map();
   for (const it of items) {
     if (!it || !it.video_id) throw badRequest('Cada item requiere `video_id`.');
@@ -153,18 +103,17 @@ function title(videoDoc) {
   return videoDoc.display_title || (videoDoc.all_titles && videoDoc.all_titles[0]) || videoDoc._id;
 }
 
-/* ---------------------------------------------------------------------------
- * Compensación best-effort tras un `_bulk_docs` parcialmente fallido
- * ------------------------------------------------------------------------- */
+/** Compensación best-effort tras un `_bulk_docs` parcialmente fallido:
+ *  revierte copias a "available" y borra préstamo/factura que sí se
+ *  hubieran escrito, antes de reintentar. Si la compensación misma falla,
+ *  se registra y se sigue — el propietario limpiaría a mano. */
 async function compensate(bulkResults, sentDocs) {
-  // Índice _id -> resultado (para saber cuáles SÍ se escribieron).
   const okIds = new Set(bulkResults.results.filter((r) => r.ok).map((r) => r.id));
 
   for (const doc of sentDocs) {
     if (!okIds.has(doc._id)) continue;
     try {
       if (doc.type === 'video') {
-        // Revertir el estado de las copias que este préstamo había marcado.
         await videoRepo.update(doc._id, (fresh) => {
           for (const c of fresh.copies) {
             if (doc.__touchedCopies && doc.__touchedCopies.includes(c.copy_id)) {
@@ -178,43 +127,31 @@ async function compensate(bulkResults, sentDocs) {
         if (fresh) await repo.db.destroy(fresh._id, fresh._rev);
       }
     } catch (e) {
-      // La compensación es best-effort: se registra y se sigue. Si falla,
-      // queda un documento "colgado" que el propietario puede limpiar a
-      // mano. Esta es la limitación honesta de no tener transacciones.
       console.error('[compensación] no se pudo revertir', doc._id, e.message);
     }
   }
 }
 
-/* ===========================================================================
- * CASO DE USO 1: registrar préstamo
- * ======================================================================== */
+/** 1. Registrar préstamo. */
 async function createLoan(body) {
   const loanDate = body.loan_date || new Date().toISOString();
 
   return withConflictRetry(
     async () => {
-      /* ----- 3.1  Cliente: existe y NO está bloqueado ------------------ */
       const client = await clientRepo.getById(body.client_id);
-      clientService.assertCanRent(client); // regla de negocio explícita
+      clientService.assertCanRent(client);
 
-      /* ----- 3.2  Plazo y configuración ------------------------------- */
       const { days, due_date } = resolveTerm(body, loanDate);
       const cfg = await configService.effectiveConfig();
 
-      /* ----- 3.3  Disponibilidad de copias (datos frescos) ----------- */
       const plan = await planAssignments(body.items);
       const moviesCount = plan.reduce((n, p) => n + p.copyIds.length, 0);
 
-      /* ----- 3.4  Cálculo de importe + descuento --------------------- *
-       * `pricing.quote` valida además que `days` <= máximo configurado
-       * ("no se permiten préstamos mayores a los días configurados").   */
+      // pricing.quote también valida días <= máximo configurado.
       const breakdown = pricing.quote(days, moviesCount, cfg.pricing, cfg.discounts);
 
-      /* ----- 3.5  Correlativo de factura (contador MVCC) ------------- */
       const invoiceNumber = await repo.nextSequence('invoice');
 
-      /* ----- 3.6  Armado del LOTE para _bulk_docs ------------------- */
       const loanId = loanRepo.makeId('loan');
       const invoiceId = loanRepo.makeId('invoice');
       const now = new Date().toISOString();
@@ -223,12 +160,11 @@ async function createLoan(body) {
       const videoDocsToSave = plan.map(({ videoDoc, copyIds }) => {
         for (const cid of copyIds) {
           const copy = videoDoc.copies.find((c) => c.copy_id === cid);
-          copy.status = 'loaned'; // <- cambio de estado de la copia embebida
+          copy.status = 'loaned';
           loanItems.push({ video_id: videoDoc._id, copy_id: cid, title: title(videoDoc) });
         }
         videoDoc.updated_at = now;
-        // marca interna para la compensación (se borra antes de enviar)
-        videoDoc.__touchedCopies = copyIds;
+        videoDoc.__touchedCopies = copyIds; // marca interna, se borra antes de enviar
         return videoDoc;
       });
 
@@ -266,9 +202,6 @@ async function createLoan(body) {
         updated_at: now,
       };
 
-      /* ----- 3.7  Enviar el lote ---------------------------------------
-       * Orden: primero los videos, luego préstamo y factura. `_bulk_docs`
-       * NO garantiza atomicidad; por eso se inspecciona el resultado. */
       const sent = [...videoDocsToSave, loanDoc, invoiceDoc];
       const payload = sent.map((d) => {
         const { __touchedCopies, ...clean } = d;
@@ -278,8 +211,6 @@ async function createLoan(body) {
       const result = await loanRepo.bulk(payload);
 
       if (result.hasErrors) {
-        // Compensar lo que sí se escribió y relanzar como 409 para que
-        // `withConflictRetry` reintente con lecturas frescas.
         await compensate(result, sent);
         const allConflicts = result.errors.every((e) => e.error === 'conflict');
         const err = new Error(
@@ -291,7 +222,6 @@ async function createLoan(body) {
         throw err;
       }
 
-      // Éxito: devolver préstamo + factura ya con _rev.
       const revById = Object.fromEntries(result.results.map((r) => [r.id, r.rev]));
       return {
         loan: { ...loanDoc, _rev: revById[loanId] },
@@ -316,10 +246,7 @@ function buildInvoiceLines(loanItems, breakdown, days) {
   return lines;
 }
 
-/* ===========================================================================
- * CASO DE USO 2: cotizar SIN persistir
- * (Buscar pelis -> agregarlas -> fijar fecha de devolución -> ver importe)
- * ======================================================================== */
+/** 2. Cotizar sin persistir (buscar películas -> agregarlas -> ver importe). */
 async function quoteLoan(body) {
   const loanDate = body.loan_date || new Date().toISOString();
   const client = await clientRepo.getById(body.client_id);
@@ -327,7 +254,7 @@ async function quoteLoan(body) {
 
   const { days, due_date } = resolveTerm(body, loanDate);
   const cfg = await configService.effectiveConfig();
-  const plan = await planAssignments(body.items); // valida disponibilidad
+  const plan = await planAssignments(body.items);
   const moviesCount = plan.reduce((n, p) => n + p.copyIds.length, 0);
   const breakdown = pricing.quote(days, moviesCount, cfg.pricing, cfg.discounts);
 
@@ -344,49 +271,29 @@ async function quoteLoan(body) {
   };
 }
 
-/* ===========================================================================
- * CASO DE USO 3: registrar DEVOLUCIÓN
- * ------------------------------------------------------------------------- *
- * Libera las copias, recalcula el importe según la fecha REAL de
- * devolución y actualiza la factura. También multi-documento -> _bulk_docs
- * con la misma estrategia compensable.
- *
- * TAMBIÉN acepta préstamos "unreturned" (cerrados antes por no devolución/
- * pérdida/robo — ver `writeOffUnreturned`): si la copia finalmente aparece,
- * esto es lo que reabre el préstamo como "returned" de verdad, recalculando
- * el importe según cuánto tardó en volver de verdad. Sin esto, una copia
- * "missing" se podía recuperar a nivel VIDEO (`recoverCopy`, vuelve a
- * "available") pero el PRÉSTAMO se quedaba "unreturned" para siempre — un
- * préstamo cerrado no puede "arreglarse solo" con el estado de la copia.
- * ======================================================================== */
+/**
+ * 3. Registrar devolución. Libera copias y recalcula el importe real.
+ * También reabre préstamos "unreturned" si la copia finalmente aparece.
+ */
 async function returnLoan(loanId, body) {
   const returnDate = body.return_date || new Date().toISOString();
 
   return withConflictRetry(
     async () => {
       const loan = await loanRepo.getLoan(loanId);
-      // "active" (nunca se dio de baja) o "unreturned" (se había marcado no
-      // devuelta/perdida/robada y ahora apareció) son los dos puntos de
-      // partida válidos. "returned" (ya devuelto) es el único terminal real.
       if (loan.status !== 'active' && loan.status !== 'unreturned') {
         throw conflict(`Este préstamo ya está cerrado (status "${loan.status}").`);
       }
       const reopeningFromUnreturned = loan.status === 'unreturned';
-      // Se rechaza solo si la devolución cae en un día ANTERIOR al del
-      // préstamo. Devolver el MISMO día es válido y se factura como 1 día.
       if (pricing.calendarDayIndex(returnDate) < pricing.calendarDayIndex(loan.loan_date)) {
         throw badRequest('La fecha de devolución no puede ser anterior al día del préstamo.');
       }
 
       const cfg = await configService.effectiveConfig();
 
-      // Días REALES transcurridos, SIN capear a `max_days`. El tope de
-      // `max_days` ("no se permiten préstamos mayores a los días
-      // configurados") es una regla de ACEPTACIÓN del plazo pedido AL
-      // CREAR/COTIZAR el préstamo (`pricing.quote` + `resolveTerm`) — no
-      // es un techo silencioso al monto que se termina cobrando aquí. Ver
-      // `pricing.quoteReturn`: si `actualDays` excede la tabla, cobra la
-      // tarifa del día más alto configurado por CADA día real.
+      // Días reales, sin capear a `max_days` (ese tope es solo de
+      // aceptación al crear/cotizar). Ver pricing.quoteReturn: si excede
+      // la tabla, cobra la tarifa del día más alto por cada día real.
       const actualDays = pricing.daysBetween(loan.loan_date, returnDate);
       const late = actualDays > loan.days;
       const early = actualDays < loan.days;
@@ -398,8 +305,7 @@ async function returnLoan(loanId, body) {
         cfg.discounts
       );
 
-      // Recargar los videos afectados y liberar SUS copias.
-      const touched = new Map(); // videoId -> Set(copyId)
+      const touched = new Map();
       for (const it of loan.items) {
         if (!touched.has(it.video_id)) touched.set(it.video_id, new Set());
         touched.get(it.video_id).add(it.copy_id);
@@ -409,13 +315,12 @@ async function returnLoan(loanId, body) {
       for (const [videoId, copyIds] of touched) {
         const v = await videoRepo.getById(videoId);
         for (const c of v.copies) {
-          // "loaned" (caso normal) o "missing" (préstamo reabierto desde
-          // "unreturned": la copia apareció) -> las dos liberan a
-          // "available". Una copia ya "retired" (baja definitiva
-          // confirmada aparte) NO se toca — esa sí es terminal de verdad.
+          // "loaned" (caso normal) o "missing" (reabierto: la copia
+          // apareció) liberan a "available". Una copia ya "retired" no se
+          // toca: esa sí es terminal.
           if (copyIds.has(c.copy_id) && (c.status === 'loaned' || c.status === 'missing')) {
             c.status = 'available';
-            c.retirement = null; // ya no aplica: la copia volvió de verdad
+            c.retirement = null;
           }
         }
         v.__touchedCopies = [...copyIds];
@@ -431,20 +336,12 @@ async function returnLoan(loanId, body) {
         returned_late: late,
         pricing_original: loan.pricing_original || loan.pricing,
         pricing: breakdown,
-        // Si venía de "unreturned", se deja constancia de que se reabrió
-        // (la copia apareció) — `closure`/`closed_at` NO se borran: quedan
-        // como historial de que en su momento sí se había cerrado por no
-        // devolución/pérdida/robo.
+        // closure/closed_at NO se borran: quedan como historial de que en
+        // su momento sí se había cerrado por no devolución.
         ...(reopeningFromUnreturned ? { reopened_at: now, reopened_from: 'unreturned' } : {}),
         updated_at: now,
       };
 
-      // Nota explicativa: solo cuando el monto recalculado difiere del
-      // pactado (si coincide, `actualDays === loan.days`, no hay nada que
-      // explicar -> null). Si además se excedió `max_days`
-      // (`breakdown.overdue`), se aclara que ya no aplica la tarifa plana
-      // de la tabla sino la del día máximo configurado, cobrada por CADA
-      // día real -- ver `pricing.quoteReturn`.
       let note = null;
       if (reopeningFromUnreturned) {
         note =
@@ -502,42 +399,13 @@ async function returnLoan(loanId, body) {
   );
 }
 
-/* ===========================================================================
- * CASO DE USO 4: BAJA POR NO DEVOLUCIÓN
- * ------------------------------------------------------------------------- *
- * Salida manual para un préstamo VENCIDO que el cliente nunca devolvió.
- *
- * IMPORTANTE (para la presentación): NO existe ningún proceso automático,
- * cron ni scheduler que marque copias como perdidas al pasar `due_date`.
- * Un préstamo vencido queda EXACTAMENTE igual ("active", copia "loaned")
- * hasta que el propietario decide una de dos cosas:
- *   (a) que la copia volvió tarde  -> `returnLoan` (calcula recargo/nota).
- *   (b) que la copia NO va a volver (por ahora) -> esta función.
- *
- * CORRECCIÓN (detectada por el propietario al revisar la app): esta salida
- * NO significa "la copia desapareció para siempre" — "no devuelto",
- * "pérdida" y "robo" son situaciones que TODAVÍA pueden resolverse (el
- * cliente aparece, la policía recupera la copia, etc.), a diferencia de un
- * "daño irreparable" real. Por eso la copia queda en estado "missing"
- * (NO "retired"): sigue fuera de circulación, pero es reversible — ver
- * `videoService.recoverCopy` (vuelve a "available") y `videoService.retireCopy`
- * sobre una copia "missing" (baja DEFINITIVA, si el propietario decide que
- * ya no vale la pena esperarla).
- *
- * Esta función, en UNA sola operación `_bulk_docs` (video[s] + préstamo +
- * factura), con la misma estrategia compensable que la devolución:
- *   - marca "missing" cada copia del préstamo que siga "loaned"
- *     (`retirement.reason` = razón indicada, por defecto "no devuelto"),
- *   - cierra el préstamo con status "unreturned" (estado terminal para el
- *     PRÉSTAMO — la renta ya ocurrió y se debe igual — distinto de
- *     "returned"; `return_date` = null). El estado terminal del préstamo
- *     NO ata a la copia: la copia puede recuperarse después sin reabrir
- *     el préstamo, que queda como registro histórico de que no volvió a
- *     tiempo por esa vía.
- *   - anota la factura. NO SE EMITE una factura nueva ni se cobra de más
- *     por esto: el importe pactado (la renta que ya se debía) NO se
- *     modifica, solo se dejó constancia en `note`.
- * ======================================================================== */
+/**
+ * 4. Baja por no devolución: salida manual para un préstamo vencido sin
+ * proceso automático que la dispare. La copia queda "missing"
+ * (recuperable), no "retired". "no devuelto" solo se acepta tras vencer
+ * el plazo; "robo"/"pérdida" en cualquier momento. Una sola operación
+ * `_bulk_docs` (video[s] + préstamo + factura).
+ */
 async function writeOffUnreturned(loanId, body = {}) {
   const reason = (body.reason || 'no devuelto').trim() || 'no devuelto';
   const date = body.date || new Date().toISOString();
@@ -551,13 +419,6 @@ async function writeOffUnreturned(loanId, body = {}) {
         );
       }
 
-      // CORRECCIÓN (detectada por el propietario al revisar la app): esta
-      // salida no validaba que el préstamo ya hubiera vencido, así que se
-      // podía marcar "no devuelto" segundos después de haberlo registrado
-      // — un sistema real no puede saber que algo "no se devolvió" antes
-      // de que llegue la fecha en que debía devolverse. "robo"/"pérdida"
-      // quedan exceptuados: esos SÍ pueden pasar (y reportarse) en
-      // cualquier momento del préstamo, no solo después del vencimiento.
       const folded = foldForSearch(reason);
       const isPlainNoReturn = PLAIN_NO_RETURN.test(folded) && !THEFT_OR_LOSS.test(folded);
       if (isPlainNoReturn && new Date(date).getTime() < new Date(loan.due_date).getTime()) {
@@ -568,8 +429,7 @@ async function writeOffUnreturned(loanId, body = {}) {
         );
       }
 
-      // Agrupar copias del préstamo por video.
-      const touched = new Map(); // videoId -> Set(copyId)
+      const touched = new Map();
       for (const it of loan.items) {
         if (!touched.has(it.video_id)) touched.set(it.video_id, new Set());
         touched.get(it.video_id).add(it.copy_id);
@@ -581,11 +441,11 @@ async function writeOffUnreturned(loanId, body = {}) {
       for (const [videoId, copyIds] of touched) {
         const v = await videoRepo.getById(videoId);
         for (const c of v.copies) {
-          // `!== 'missing' && !== 'retired'` (en vez de `=== 'loaned'`) para
-          // que un reintento tras un fallo parcial + compensación converja
-          // igual sin duplicar el efecto.
+          // Compara contra "!== retired/missing" (no "=== loaned") para
+          // que un reintento tras fallo parcial + compensación converja
+          // sin duplicar el efecto.
           if (copyIds.has(c.copy_id) && c.status !== 'missing' && c.status !== 'retired') {
-            c.status = 'missing'; // NO terminal: ver comentario arriba.
+            c.status = 'missing';
             c.retirement = { date, reason, loan_id: loan._id };
             missingCopies.push({ video_id: videoId, copy_id: c.copy_id });
           }
@@ -598,7 +458,7 @@ async function writeOffUnreturned(loanId, body = {}) {
       const updatedLoan = {
         ...loan,
         status: 'unreturned',
-        return_date: null, // nunca se devolvió
+        return_date: null,
         closed_at: now,
         closure: { kind: 'unreturned', reason, date, copies: missingCopies },
         updated_at: now,
@@ -608,8 +468,6 @@ async function writeOffUnreturned(loanId, body = {}) {
       const missingList = missingCopies.map((c) => c.copy_id).join(', ') || '(ninguna seguía prestada)';
       const updatedInvoice = {
         ...invoice,
-        // NO se emite una factura nueva ni se cobra de más: se anota la
-        // existente. El importe pactado sigue siendo el que se debe.
         note:
           `Préstamo cerrado por NO DEVOLUCIÓN (${date}). ` +
           `Copia(s) marcada(s) como no disponible (recuperable): ${missingList}. ` +
@@ -646,9 +504,6 @@ async function writeOffUnreturned(loanId, body = {}) {
   );
 }
 
-/* ---------------------------------------------------------------------------
- * Lecturas
- * ------------------------------------------------------------------------- */
 async function listLoans(opts) {
   return loanRepo.listLoans(opts);
 }

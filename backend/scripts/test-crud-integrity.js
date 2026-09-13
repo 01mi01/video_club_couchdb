@@ -1,39 +1,10 @@
 /**
- * ============================================================================
- * scripts/test-crud-integrity.js  —  PRUEBA DE INTEGRIDAD CRUD ACOTADA
- * ============================================================================
- *
- * Ejecución MANUAL y PUNTUAL (no es una suite `npm test`, no se deja
- * corriendo, no se agrega a scripts de arranque):
+ * Prueba de integridad CRUD puntual (no una suite `npm test`): create,
+ * update, delete por entidad, más bloqueo de cliente, consistencia
+ * préstamo-copia, y conflicto de `_rev`. Datos descartables
+ * (`TEST_DELETE_ME`), limpiados en `finally`.
  *
  *     node scripts/test-crud-integrity.js
- *
- * QUÉ VERIFICA (según CLAUDE.md):
- *
- *   Por cada entidad (géneros, clientes, videos, préstamos):
- *     - CREATE : crea un documento de prueba y confirma con un GET real.
- *     - UPDATE : actualiza y confirma que el cambio se aplicó y que NO se
- *                duplicó (sigue existiendo UN solo doc con ese `_id`).
- *     - DELETE : elimina y confirma con un GET que YA NO existe (se
- *                comprueba el estado real en CouchDB, no solo el 200).
- *
- *   Verificaciones adicionales obligatorias:
- *     - REGLA DE BLOQUEO      : un cliente bloqueado NO puede generar un
- *                               préstamo (rechazo explícito).
- *     - CONSISTENCIA PRÉSTAMO-COPIA : al crear el préstamo, la copia queda
- *                               en `"loaned"` de forma consistente con la
- *                               creación del préstamo (vía `_bulk_docs`).
- *     - MANEJO DE CONFLICTOS _rev : se fuerza un conflicto real (409) y se
- *                               confirma que `conflictRetry.js` lo resuelve
- *                               sin pérdida de datos y sin duplicar.
- *
- * DATOS: sólo documentos descartables creados por el propio script y
- * marcados de forma inequívoca (prefijo `TEST_DELETE_ME` + sufijo único).
- * NUNCA toca datos reales insertados a mano.
- *
- * LIMPIEZA: todo lo creado se registra y se borra en el bloque `finally`,
- * aunque una verificación falle a mitad de camino.
- * ============================================================================
  */
 
 require('dotenv').config();
@@ -96,14 +67,8 @@ async function countById(id) {
   return res.rows.length;
 }
 
-/* ===========================================================================
- * 1) GÉNEROS  — CREATE/UPDATE + DESACTIVAR/REACTIVAR (soft delete).
- *
- *    Ya NO existe ningún DELETE real para género (ni para ninguna otra
- *    entidad del sistema): el enunciado nunca pide "eliminar", solo "dar
- *    de baja" copias y "bloquear" clientes, ambos no-destructivos. Género
- *    sigue ese mismo patrón con `active: boolean` (ver genreService.js).
- * ======================================================================== */
+// 1) Géneros — create/update + desactivar/reactivar (sin DELETE real: se
+// desactivan, mismo patrón no-destructivo que el resto del sistema).
 async function testGenres() {
   console.log('\n── GÉNEROS ─────────────────────────────────────────────');
   let genre;
@@ -175,12 +140,9 @@ async function testGenres() {
   });
 }
 
-/* ===========================================================================
- * 2) CLIENTES — CREATE / UPDATE + verificación de que el bloqueo se persiste.
- *    (No hay endpoint DELETE de clientes por diseño: se bloquean, no se
- *    borran. El DELETE se verifica a nivel repositorio para la limpieza y
- *    para dejar constancia del estado real.)
- * ======================================================================== */
+// 2) Clientes — create/update + bloqueo. Sin DELETE por endpoint (se
+// bloquean, no se borran); el DELETE de acá es solo a nivel repositorio,
+// para la limpieza.
 async function testClients() {
   console.log('\n── CLIENTES ────────────────────────────────────────────');
   let client;
@@ -229,10 +191,8 @@ async function testClients() {
   });
 }
 
-/* ===========================================================================
- * 3) VIDEOS — CREATE / UPDATE (sin tocar copias) / alta y baja de copias /
- *    DELETE a nivel repositorio.
- * ======================================================================== */
+// 3) Videos — create/update (sin tocar copias) / alta y baja de copias /
+// DELETE a nivel repositorio.
 async function testVideos() {
   console.log('\n── VIDEOS ──────────────────────────────────────────────');
   let genre;
@@ -363,9 +323,7 @@ async function testVideos() {
   });
 }
 
-/* ===========================================================================
- * 4) PRÉSTAMOS — verificaciones adicionales obligatorias
- * ======================================================================== */
+// 4) Préstamos — verificaciones adicionales obligatorias.
 async function testLoans() {
   console.log('\n── PRÉSTAMOS ───────────────────────────────────────────');
 
@@ -625,9 +583,6 @@ async function testLoans() {
   });
 }
 
-/* ===========================================================================
- * LIMPIEZA
- * ======================================================================== */
 async function cleanup() {
   console.log('\n── LIMPIEZA ────────────────────────────────────────────');
   const groups = [
@@ -693,9 +648,6 @@ async function sweepByRunMarker() {
   }
 }
 
-/* ===========================================================================
- * MAIN
- * ======================================================================== */
 async function main() {
   console.log('============================================================');
   console.log(' PRUEBA DE INTEGRIDAD CRUD ACOTADA');

@@ -46,23 +46,10 @@ async function update(id, body) {
 }
 
 /**
- * DESACTIVAR / REACTIVAR un género — reemplaza el borrado permanente.
- *
- * DECISIÓN (no pedida por el enunciado, corregida a partir de la revisión):
- * el profesor NUNCA pide "eliminar" ninguna entidad del sistema; su patrón
- * es siempre no-destructivo (bajas de copia con fecha/razón, bloqueo de
- * cliente con fecha/razón). El género es una entidad que agregamos
- * nosotros (restricción de modelado, no requerimiento del profesor), así
- * que se alinea con ese mismo patrón: en vez de DELETE se marca
- * `active: false`.
- *
- * Efecto de `active: false` (aplicado en `videoService.normalizeVideoInput`,
- * no aquí): el género deja de poder asignarse a películas NUEVAS o
- * agregarse a una edición, pero NO se toca ninguna película que ya lo
- * referencie — sigue existiendo el documento y se sigue mostrando sin
- * problema. Por eso, a diferencia del viejo `remove()`, aquí NO hace falta
- * ninguna comprobación de integridad referencial contra `videoRepo`: no
- * hay borrado real, no hay nada que proteger.
+ * Desactivar/reactivar reemplaza el borrado permanente (el enunciado nunca
+ * pide "eliminar", solo bajas/bloqueos con fecha y razón). El efecto real
+ * (un género inactivo no se puede asignar a películas nuevas) se aplica en
+ * `videoService.normalizeVideoInput`, no aquí.
  */
 async function deactivate(id) {
   await genreRepo.getById(id); // 404 si no existe

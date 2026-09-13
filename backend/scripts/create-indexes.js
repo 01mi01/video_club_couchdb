@@ -1,101 +1,42 @@
 /**
- * ============================================================================
- * scripts/create-indexes.js  —  EJECUCIÓN MANUAL
- * ============================================================================
+ * Crea los índices Mango, uno por cada búsqueda que exige el enunciado
+ * (nombre, género, actor, nominación al Oscar) y ninguno más.
  *
- * Crea los índices Mango (`_index`) que necesita la aplicación.
- *
- * Uso:
  *     node scripts/create-indexes.js
- *
- *
- * ----------------------------------------------------------------------------
- * CRITERIO: un índice por CADA búsqueda que el profesor pidió
- * explícitamente, y NINGUNO más.
- * ----------------------------------------------------------------------------
- * El enunciado exige buscar películas por: NOMBRE, GÉNERO, ACTOR y
- * NOMINACIÓN AL OSCAR. Sin índice, CouchDB resuelve esas consultas con un
- * full scan y devuelve un `warning` de consulta "unindexed": funciona con
- * pocos documentos pero no escala. Por eso estos 4 índices SÍ se
- * justifican uno por uno.
- *
- * NO se crean índices sobre campos que no sirven una búsqueda requerida
- * (p.ej. `unit_cost`, `copies.status`, `release_year`, `type`): la
- * ausencia justificada de un índice es tan importante de explicar como su
- * presencia. Los listados por tipo ("todos los videos", "todos los
- * clientes") se resuelven con rangos de `_id` sobre `_all_docs` (índice
- * primario, siempre presente) — ver `repositories/couchRepository.js`.
- *
- * ----------------------------------------------------------------------------
- * NOTA PARA LA PRESENTACIÓN (Parte A: CONSISTENCIA)
- * ----------------------------------------------------------------------------
- * Los índices Mango en CouchDB son estructuras SECUNDARIAS que se
- * construyen de forma ASÍNCRONA: después de una escritura, el índice no
- * refleja el cambio de inmediato; se actualiza en la siguiente consulta
- * que lo use (o en segundo plano). Es un ejemplo directo de CONSISTENCIA
- * EVENTUAL, no inmediata. Una búsqueda hecha milisegundos después de
- * insertar una película podría no encontrarla todavía hasta que el índice
- * "se ponga al día".
- * ============================================================================
  */
 
 require('dotenv').config();
 const { db } = require('../config/db');
 
-/**
- * Cada entrada:
- *   ddoc  : nombre del design doc que agrupa el índice
- *   name  : nombre del índice (se referencia con `use_index` en `_find`)
- *   fields: campos indexados
- *   why   : requerimiento funcional que justifica el índice
- */
 const INDEXES = [
   {
     ddoc: 'idx-search-titles',
     name: 'idx-search-titles',
-    // `search_titles` es el arreglo plano con TODOS los títulos de la
-    // película (principal, original, inglés, alternativos) YA PLEGADOS:
-    // sin acentos y en minúsculas (ver `foldForSearch` en
-    // `services/videoService.js`). Se indexa la forma plegada, no
-    // `all_titles`, porque Mango no hace comparación insensible a acentos:
-    // buscar "nomadas" debe encontrar "Nómadas". La consulta aplica el
-    // mismo plegado al texto buscado.
-    //
-    // (Sustituye al antiguo índice `idx-titles` sobre `all_titles`, que ya
-    // no respalda ninguna búsqueda: `all_titles` se conserva solo para
-    // mostrar. `scripts/backfill-search-titles.js` elimina ese índice
-    // viejo y rellena `search_titles` en los documentos ya existentes.)
+    // Se indexa `search_titles` (plegado, sin acentos), no `all_titles`.
     fields: ['search_titles'],
-    why: 'Gestión de Préstamos 1: "Buscar película por nombre" (insensible a acentos/mayúsculas).',
+    why: 'Buscar película por nombre (insensible a acentos/mayúsculas).',
   },
   {
     ddoc: 'idx-genres',
     name: 'idx-genres',
-    // `genre_ids` referencia los documentos de género normalizados
-    // (relación muchos-a-muchos). Se busca por el ID del género.
     fields: ['genre_ids'],
-    why: 'Gestión de Préstamos 1: "Buscar película por género".',
+    why: 'Buscar película por género.',
   },
   {
     ddoc: 'idx-actors',
     name: 'idx-actors',
     fields: ['main_actors'],
-    why: 'Gestión de Préstamos 1: "Buscar película por actor".',
+    why: 'Buscar película por actor.',
   },
   {
     ddoc: 'idx-oscar-nominations',
     name: 'idx-oscar-nominations',
-    // `oscar_nominations` es un arreglo de IDs a `oscar_category`
-    // (categoría normalizada, con `name_en`/`name_es` — antes era texto
-    // libre en inglés, lo que rompía la búsqueda en español). El texto
-    // buscado se resuelve primero a IDs de categoría en memoria
-    // (`oscarCategoryService.findIdsByText`, colección chica) y LUEGO se
-    // consulta este índice con esos IDs (`$elemMatch: { $in: [...] }`) —
-    // el índice en sí sigue siendo sobre el mismo campo, solo cambió qué
-    // tipo de valor guarda. Sirve tanto "¿fue nominada?" como "nominada en
-    // tal categoría".
+    // `oscar_nominations`: IDs de `oscar_category` (antes texto libre en
+    // inglés). El texto buscado se resuelve primero a IDs en memoria
+    // (oscarCategoryService.findIdsByText) y luego se consulta este
+    // índice con esos IDs.
     fields: ['oscar_nominations'],
-    why: 'Gestión de Préstamos 1: "Buscar película por nominación al Oscar".',
+    why: 'Buscar película por nominación al Oscar.',
   },
 ];
 
@@ -107,18 +48,13 @@ async function main() {
       name: ix.name,
       type: 'json',
     };
-    // `db.createIndex` es idempotente: si el índice ya existe con la
-    // misma definición, CouchDB responde "exists" y no lo duplica.
+    // Idempotente: si ya existe con la misma definición, responde "exists".
     const res = await db.createIndex(definition);
     console.log(
       `[${res.result}] ${ix.name}  (campos: ${ix.fields.join(', ')})  <- ${ix.why}`
     );
   }
-  console.log('\nÍndices Mango listos.');
-  console.log(
-    'Recuerda: se construyen de forma asíncrona (consistencia eventual). ' +
-      'La primera búsqueda tras muchas inserciones puede tardar mientras el índice se pone al día.'
-  );
+  console.log('\nÍndices Mango listos (se construyen de forma asíncrona).');
 }
 
 main().catch((err) => {

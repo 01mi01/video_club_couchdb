@@ -1,25 +1,9 @@
 /**
- * ============================================================================
- * scripts/backfill-search-titles.js  —  MIGRACIÓN PUNTUAL (ejecución manual)
- * ============================================================================
+ * Migración puntual: crea `idx-search-titles`, recalcula `search_titles`
+ * en las películas ya cargadas y borra el índice viejo `idx-titles`.
+ * Idempotente.
  *
  *     node scripts/backfill-search-titles.js
- *
- * CONTEXTO
- *   La búsqueda por nombre pasó de comparar contra `all_titles` (sensible a
- *   acentos) a comparar contra `search_titles` (forma plegada: sin acentos,
- *   minúsculas — ver `foldForSearch` en `services/videoService.js`).
- *
- * QUÉ HACE (idempotente, se puede correr varias veces)
- *   1. Crea el índice Mango `idx-search-titles` sobre `search_titles`.
- *   2. Recorre TODAS las películas ya cargadas y les calcula/actualiza
- *      `search_titles` a partir de sus títulos. No toca ningún otro campo
- *      (ni copias, ni géneros, ni datos reales de la película).
- *   3. Elimina el índice viejo `idx-titles` (sobre `all_titles`), que ya no
- *      respalda ninguna búsqueda — CLAUDE.md: sin índices decorativos.
- *
- * NO crea ni borra películas. Solo añade el campo derivado `search_titles`.
- * ============================================================================
  */
 
 require('dotenv').config();

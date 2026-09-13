@@ -1,23 +1,8 @@
 /**
- * ============================================================================
- * scripts/create-admin.js  —  EJECUCIÓN MANUAL, UNA SOLA VEZ
- * ============================================================================
+ * Crea el documento del único usuario admin, a partir de
+ * ADMIN_USERNAME/ADMIN_PASSWORD en `.env`. Ejecución manual, una sola vez.
  *
- * Crea el documento del ÚNICO usuario de la aplicación (el propietario
- * del videoclub). No hay registro de usuarios por endpoint.
- *
- * Lee de `.env`:
- *   ADMIN_USERNAME=...
- *   ADMIN_PASSWORD=...
- *
- * Hashea la contraseña con bcrypt e inserta:
- *   { _id: "admin:<username>", type: "admin",
- *     username, password_hash, created_at }
- *
- * Uso:
  *     node scripts/create-admin.js
- *
- * ============================================================================
  */
 
 require('dotenv').config();

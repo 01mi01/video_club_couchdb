@@ -1,19 +1,8 @@
 /**
- * ============================================================================
- * scripts/verify-title-search.js  —  VERIFICACIÓN de la búsqueda por nombre
- * ============================================================================
+ * Verifica, solo lectura, que la búsqueda por nombre es insensible a
+ * acentos/mayúsculas y cubre todos los títulos, no solo el principal.
  *
  *     node scripts/verify-title-search.js
- *
- * Comprueba contra los DATOS REALES ya cargados que /api/videos/search
- * (title=...) cumple:
- *   1. Busca sobre TODOS los títulos (all_titles / search_titles), no solo
- *      el principal.
- *   2. Es insensible a mayúsculas/minúsculas.
- *   3. Es insensible a acentos: "nomadas" encuentra "Nómadas".
- *
- * Solo lee (usa videoService.search). No modifica nada.
- * ============================================================================
  */
 
 require('dotenv').config();

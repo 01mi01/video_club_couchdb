@@ -1,14 +1,8 @@
 import { Card, Field, TextInput, Select } from './ui.jsx';
 import { toDateInput, fromDateInput } from '../lib/format.js';
 
-// ============================================================================
-// Campos del formulario de CLIENTE, extraídos como componente compartido
-// para no duplicar el formulario completo entre ClientFormPage (página de
-// alta/edición) y el modal "Nuevo cliente" embebido en NewLoanPage (pedido
-// explícito: poder registrar un cliente sin salir de "Nuevo préstamo").
-// Misma validación / mismos campos en los dos lugares — una sola fuente de
-// verdad para la forma del formulario.
-// ============================================================================
+// Campos del formulario de cliente, compartidos entre ClientFormPage y el
+// modal "Nuevo cliente" de NewLoanPage — una sola fuente de verdad.
 
 export const CLIENT_EMPTY = {
   first_name: '',

@@ -1,36 +1,8 @@
 /**
- * ============================================================================
- * scripts/seed-clients.js  —  CARGA DE CLIENTES REALES (ejecución manual)
- * ============================================================================
- *
- * Autorizado por CLAUDE.md, seccion "Contenido de datos - peliculas y
- * clientes" + regla de trabajo 2. NO son datos de prueba descartables.
+ * Carga 20 clientes reales vía `clientService.create`. Idempotente (salta
+ * emails ya existentes).
  *
  *     node scripts/seed-clients.js
- *
- * QUE HACE
- *   - Crea 20 clientes con `clientService.create(...)`, el mismo camino de
- *     validacion/normalizacion que usa POST /api/clients (el servidor HTTP
- *     no se levanta; regla de trabajo 1).
- *   - Idempotente: si ya existe un cliente con el mismo email, lo salta.
- *
- * CRITERIOS APLICADOS (instrucciones del propietario)
- *   - Nombres SIEMPRE anglosajones/EE.UU. (nombre + apellido paterno +
- *     apellido materno). Nunca nombres latinoamericanos.
- *   - Telefono celular: formato boliviano real, 8 digitos, empieza en 6 o
- *     7, sin codigo de pais.
- *   - Direccion: ubicaciones reales de ciudades bolivianas, variadas
- *     (La Paz, Santa Cruz, Cochabamba, Sucre, Oruro, Potosi, Tarija,
- *     Trinidad, El Alto, Montero, Quillacollo).
- *   - Geolocalizacion: lat/lng reales del barrio/ciudad correspondiente
- *     (no aleatorias).
- *   - Email con formato realista basado en el nombre.
- *   - Fecha de nacimiento: edades entre 20 y 55 (referencia: ano 2026).
- *   - registered_at: fechas repartidas dentro del ultimo ano
- *     (2025-09 .. 2026-09).
- *   - Ninguno bloqueado (clientService.create ya fija blocked.is_blocked
- *     = false; no se toca).
- * ============================================================================
  */
 
 require('dotenv').config();

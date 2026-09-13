@@ -2,21 +2,11 @@ import { createContext, useContext, useCallback, useRef } from 'react';
 
 /**
  * Permite que una pantalla con cambios sin guardar (ej. Configuración)
- * INTERCEPTE la navegación disparada por el sidebar, para poder mostrar
- * su propio aviso ("existen cambios sin guardar") antes de salir.
- *
- * LIMITACIÓN HONESTA: esta app usa `<Routes>` declarativo (no un "data
- * router" vía `createBrowserRouter`), así que el `useBlocker` nativo de
- * React Router (que también atraparía el botón "atrás" del navegador) no
- * está disponible aquí. Este mecanismo cubre navegación por el sidebar
- * (el 100% de la navegación normal de esta app de un solo panel) y, junto
- * con `beforeunload`, el cierre de pestaña/recarga — no el botón "atrás".
- *
- * Uso:
- *   const { register } = useNavGuard();
- *   useEffect(() => register({ tryNavigate: (to) => !dirty }), [dirty]);
- *   // si `tryNavigate` devuelve false, la pantalla que lo registró debe
- *   // mostrar su propia confirmación y navegar ella misma si el usuario acepta.
+ * intercepte la navegación del sidebar para mostrar su propio aviso antes
+ * de salir. Limitación: esta app usa `<Routes>` declarativo, no un "data
+ * router", así que no hay `useBlocker` nativo — esto cubre navegación por
+ * el sidebar y (junto con `beforeunload`) cierre de pestaña, pero no el
+ * botón "atrás" del navegador.
  */
 const NavGuardContext = createContext(null);
 

@@ -1,11 +1,8 @@
 /**
- * ============================================================================
- * Servicio de CLIENTES — Gestión de Clientes del enunciado
- * ============================================================================
- *  1. Registrar nuevos clientes.
- *  2. Actualizar datos de clientes.
- *  3. Bloquear clientes (fecha + razón). Los bloqueados no pueden rentar.
- * ============================================================================
+ * Servicio de CLIENTES.
+ *   1. Registrar nuevos clientes.
+ *   2. Actualizar datos.
+ *   3. Bloquear/desbloquear (fecha + razón). Bloqueados no pueden rentar.
  */
 
 const clientRepo = require('../repositories/clientRepository');
@@ -26,10 +23,8 @@ async function normalize(body, { partial = false, existingZoneId = null } = {}) 
   req('paternal_surname', 'apellido paterno');
   req('phone_mobile', 'teléfono celular');
   req('birth_date', 'fecha de nacimiento');
-  // `email` es OPCIONAL: el enunciado del profesor lo lista como dato a
-  // capturar pero nunca lo marca obligatorio (a diferencia de teléfono,
-  // fecha de nacimiento, etc.). Si se provee, igual se exige formato
-  // válido (ver EMAIL_RE más abajo).
+  // `email` es opcional (el enunciado lo lista pero no lo exige); si se
+  // provee, igual se valida el formato (EMAIL_RE abajo).
 
   if (body.first_name !== undefined) out.first_name = String(body.first_name).trim();
   if (body.paternal_surname !== undefined)
@@ -54,15 +49,9 @@ async function normalize(body, { partial = false, existingZoneId = null } = {}) 
     out.birth_date = d.toISOString().slice(0, 10);
   }
 
-  // Dirección + geolocalización de la dirección.
-  //
-  // DECISIÓN (resuelve un problema real de captura de datos): en vez de
-  // pedirle al empleado que teclee lat/lng exactos a mano, la
-  // "geolocalización de la dirección" que exige el enunciado se resuelve
-  // con una ZONA preconfigurada (documento normalizado propio, mismo
-  // patrón que género/categoría de Oscar — ver zoneRepository.js). El
-  // cliente guarda `address.zone_id`, nunca lat/lng embebidos: la
-  // geolocalización real se obtiene resolviendo la zona referenciada.
+  // La geolocalización de la dirección se resuelve por referencia a una
+  // ZONA preconfigurada (documento normalizado, ver zoneRepository.js) en
+  // vez de que el empleado teclee lat/lng a mano.
   if (body.address !== undefined || !partial) {
     const addr = body.address || {};
     const text = String(addr.text || '').trim();
@@ -73,10 +62,8 @@ async function normalize(body, { partial = false, existingZoneId = null } = {}) 
     if (rawZoneId) {
       const zone = await zoneRepo.tryGetById(rawZoneId);
       if (!zone || zone.type !== 'zone') throw badRequest(`Zona inexistente: ${rawZoneId}`);
-      // Mismo criterio que género/categoría de Oscar (ver
-      // videoService.normalizeVideoInput): una zona INACTIVA no se puede
-      // asignar a un cliente NUEVO ni AGREGAR en una edición, pero si el
-      // cliente YA la tenía, conservarla no cuenta como "asignar".
+      // Igual que género/categoría de Oscar: una zona inactiva no se puede
+      // asignar de nuevo, pero conservar la que ya tenía sí se permite.
       if (zone.active === false && rawZoneId !== existingZoneId) {
         throw badRequest(
           `La zona "${zone.name}" está inactiva: no se puede asignar a clientes nuevos ni agregar en una edición.`
@@ -110,10 +97,8 @@ async function getById(id) {
 
 /** 2. Actualizar datos. No cambia el estado de bloqueo (tiene su endpoint). */
 async function update(id, body) {
-  // Lectura previa SOLO para conocer la zona ya asociada (permite
-  // distinguir "conservar una zona inactiva que ya tenía" de "agregar una
-  // inactiva nueva" — mismo patrón que `videoService.update` con
-  // `genre_ids`). La escritura real sigue yendo por `clientRepo.update`.
+  // Lectura previa solo para conocer la zona ya asociada (ver comentario
+  // sobre zonas inactivas en `normalize`).
   const current = await clientRepo.getById(id);
   const patch = await normalize(body, {
     partial: true,

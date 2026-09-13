@@ -1,9 +1,7 @@
 import { api } from './client.js';
 
-// ============================================================================
-// Mapa 1:1 con los endpoints del backend. Cada funcion aqui corresponde a
-// una ruta de Express (ver backend/routes/*). La UI llama SIEMPRE por aqui.
-// ============================================================================
+// Mapa 1:1 con los endpoints del backend (ver backend/routes/*). La UI
+// llama siempre por acá.
 
 const data = (p) => p.then((r) => r.data);
 

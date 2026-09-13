@@ -1,49 +1,9 @@
 /**
- * ============================================================================
- * scripts/seed-movies-2.js  —  CARGA DE PELÍCULAS REALES, SEGUNDA TANDA
- * ============================================================================
- *
- * Autorizado por CLAUDE.md, sección "Contenido de datos — películas y
- * clientes" + regla de trabajo 2 (pedido explícito del propietario: sumar
- * 40 películas más al catálogo, para llegar a 120). NO son datos de
- * prueba descartables: es catálogo real, con datos verificables.
+ * Segunda tanda del catálogo (40 películas más, modelo actual con
+ * `director` y categorías de Oscar por ID). Idempotente por
+ * `display_title` + `release_year`.
  *
  *     node scripts/seed-movies-2.js
- *
- * A diferencia de `seed-movies.js` (primera tanda, anterior a la
- * simplificación del modelo de títulos): usa el modelo ACTUAL —
- * `director` en vez de nada, sin `english_title` (cualquier título en
- * inglés va directo a `alternative_titles[]`) — y resuelve
- * `oscar_nominations`/`oscar_wins` a IDs de `oscar_category` (por
- * `name_en`), no a strings libres.
- *
- * CRITERIOS APLICADOS (mismos de CLAUDE.md que la primera tanda):
- *   - Prioridad a Cannes reciente: Anora, Anatomy of a Fall, The
- *     Substance, Emilia Pérez, The Zone of Interest, Sentimental Value,
- *     The Worst Person in the World, Shoplifters, Fallen Leaves, Close,
- *     Compartment No. 6, Amour, Dheepan, Winter Sleep, I Daniel Blake,
- *     Toni Erdmann, Pain and Glory, All We Imagine as Light, La Chimera.
- *   - Cine francés pedido explícitamente: Petite Maman (Céline Sciamma),
- *     Humanist Vampire Seeking Consenting Suicidal Person (Québec,
- *     francófona), más varias de Jacques Audiard/Michael Haneke.
- *   - Wong Kar-wai (pedido explícito, "chucking express" = Chungking
- *     Express): se agregan 4 películas del mismo director — Chungking
- *     Express, Fallen Angels, Happy Together, 2046 — además de "In the
- *     Mood for Love" que ya estaba en el catálogo.
- *   - Left-Handed Girl (pedido explícito, Cannes 2025).
- *   - Mezcla con mainstream premiado (para no ser solo festivalero):
- *     Oppenheimer, Everything Everywhere All at Once, Poor Things,
- *     Killers of the Flower Moon, Dune / Dune: Part Two, Conclave, Past
- *     Lives, Spider-Man: Across the Spider-Verse, Inside Out 2, Barbie,
- *     The Holdovers, American Fiction.
- *   - `oscar_nominations[]`/`oscar_wins[]` reales y verificables.
- *   - Nada en blanco y negro / nada anterior a 1986; sin gore de
- *     explotación.
- *   - `units_acquired` variado entre 1 y 5.
- *
- * Idempotente: si ya existe un video con el mismo `display_title` +
- * `release_year`, lo salta.
- * ============================================================================
  */
 
 require('dotenv').config();

@@ -1,36 +1,9 @@
 /**
- * ============================================================================
- * scripts/migrate-video-titles.js  —  EJECUCIÓN MANUAL, UNA SOLA VEZ
- * ============================================================================
+ * Elimina `english_title` (movido a `alternative_titles[]` si hacía
+ * falta) y agrega `director`. Idempotente.
  *
- * Simplifica el modelo de títulos de video (ver CLAUDE.md, sección
- * "Ajuste al modelo de video — simplificación de títulos + director"):
- *
- *   - Elimina el campo `english_title` (redundante con `alternative_titles[]`).
- *   - Antes de borrarlo, para cada película: si `english_title` tenía un
- *     valor distinto de `display_title`/`original_title` y NO estaba ya en
- *     `alternative_titles[]`, se agrega ahí — ningún dato se pierde.
- *   - Agrega `director` (string) con el director real de cada película,
- *     tomado del mapa DIRECTORS de abajo (investigado, dato real verificable,
- *     no inventado).
- *   - Recalcula `all_titles`/`search_titles` con `videoService.buildAllTitles`
- *     / `buildSearchTitles` YA actualizados (sin `english_title`).
- *
- * Uso:
- *   node scripts/migrate-video-titles.js             (DRY-RUN: solo reporta, no escribe nada)
- *   node scripts/migrate-video-titles.js --apply      (migra los videos)
- *
- * IDEMPOTENTE: si un video ya no tiene `english_title` (migración previa),
- * se saltea (salvo que le falte `director`, en cuyo caso solo se le agrega
- * el director sin tocar títulos).
- *
- * VERIFICACIÓN ESTRICTA POR PELÍCULA: tras cada `update` se relee el
- * documento YA GUARDADO en CouchDB (no lo que `update` devuelve en memoria)
- * y se compara contra lo esperado: `english_title` ausente, `director`
- * presente, y CADA título que tenía `english_title` presente en
- * `alternative_titles[]`. Si algo no cuadra, se aborta con el detalle del
- * video afectado — nunca se sigue en silencio.
- * ============================================================================
+ *     node scripts/migrate-video-titles.js             (dry-run)
+ *     node scripts/migrate-video-titles.js --apply
  */
 
 require('dotenv').config();

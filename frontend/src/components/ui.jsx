@@ -69,14 +69,9 @@ export function TextInput(props) {
 export function TextArea(props) {
   return <textarea className="input" rows={3} {...props} />;
 }
-// Los selects nativos dibujan su propia flecha pegada al borde derecho del
-// control (chrome del navegador, ignora el `padding-right` del elemento) —
-// por eso se ve "tocando el límite" a diferencia de un <input> de texto.
-// Se desactiva esa flecha nativa (`appearance-none`) y se dibuja una propia
-// en SVG, posicionada al mismo `right` que el padding lateral de `.input`
-// (px-3.5), para que quede alineada igual que el resto del espaciado del
-// formulario. `pr-9` deja hueco suficiente para que el texto seleccionado
-// nunca quede debajo del ícono.
+// El select nativo dibuja su flecha pegada al borde (ignora el
+// `padding-right`), así que se desactiva (`appearance-none`) y se dibuja
+// una propia en SVG alineada con el padding de `.input`.
 export function Select({ children, className = '', ...props }) {
   return (
     <div className="relative">

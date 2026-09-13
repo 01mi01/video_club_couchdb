@@ -1,23 +1,8 @@
 /**
- * ============================================================================
- * REGLAS DE NEGOCIO DE PRECIOS Y DESCUENTOS  (funciones puras)
- * ============================================================================
- *
- * Aquí NO se toca CouchDB. Son funciones puras y testeables a mano que
- * concentran las reglas del enunciado:
- *
- *   - Costos por día de préstamo (configurable):
- *       1 día = 2 Bs | 2 días = 3 Bs | 3 días = 4 Bs | 4 días = 5 Bs | 5 días = 6 Bs
- *     => "No deben permitirse préstamos mayores a los días configurados".
- *
- *   - Descuentos por cantidad de películas (configurable):
- *       3 a 5 películas  => 5%
- *       más de 5         => 10%
- *
- * Los DEFAULTS del enunciado viven como constantes (no como datos semilla
- * en la base). `configService` los mezcla con lo que el propietario haya
- * guardado vía PUT.
- * ============================================================================
+ * Reglas de negocio de precios y descuentos (funciones puras, no tocan
+ * CouchDB). Defaults del enunciado: 1-5 días = 2..6 Bs; 3-5 películas =
+ * 5% descuento, más de 5 = 10%. `configService` los combina con lo que el
+ * propietario haya guardado vía PUT.
  */
 
 // Costo total por película para un préstamo de N días (según tabla).
@@ -105,19 +90,10 @@ function buildBreakdown(perMovie, moviesCount, priceByDays, discountsCfg) {
 }
 
 /**
- * Cálculo del importe al REGISTRAR/COTIZAR un préstamo.
- *
- * Aquí SÍ aplica el tope del enunciado ("no se permiten préstamos mayores
- * a los días configurados"): es una regla de ACEPTACIÓN del plazo pedido,
- * ver `assertDaysAllowed`. Este tope es EXCLUSIVO de este momento — NO se
- * reutiliza para capear el monto que se termina cobrando en una
- * devolución real tardía (ver `quoteReturn` más abajo).
- *
- * @param {number} days           Días de préstamo PACTADOS.
- * @param {number} moviesCount    Cantidad de películas.
- * @param {object} pricingCfg     { price_by_days, ... }
- * @param {object} discountsCfg   { tiers }
- * @returns desglose para guardar en `loan.pricing` y para la factura.
+ * Importe al registrar/cotizar un préstamo. Aquí aplica el tope de días
+ * configurado (`assertDaysAllowed`) — es una regla de aceptación del plazo
+ * pedido, no se reutiliza para capear el cobro de una devolución tardía
+ * real (ver `quoteReturn`).
  */
 function quote(days, moviesCount, pricingCfg, discountsCfg) {
   const priceByDays = pricingCfg.price_by_days;
@@ -126,26 +102,7 @@ function quote(days, moviesCount, pricingCfg, discountsCfg) {
   return buildBreakdown(perMovie, moviesCount, priceByDays, discountsCfg);
 }
 
-/**
- * Cálculo del importe en la DEVOLUCIÓN real, con `actualDays` SIN capear.
- *
- * El tope de `max_days` ("no se permiten préstamos mayores a los días
- * configurados") es una regla de admisión al CREAR/COTIZAR el préstamo
- * (ver `quote` arriba) — NO es un techo silencioso al monto que se cobra
- * cuando la devolución real termina excediendo ese límite. Dos casos:
- *
- *   - `actualDays <= max_days`  -> tarifa PLANA normal de la tabla para
- *     ese plazo, igual que en `quote` (`price_by_days[actualDays]`).
- *   - `actualDays >  max_days`  -> ya no hay una tarifa plana definida
- *     para un plazo tan largo (la tabla no llega tan lejos), así que se
- *     cobra la tarifa del día MÁS ALTO configurado (`maxDayRate`) POR
- *     CADA día real, incluidos los que exceden el máximo. Ej.: si
- *     max_days=5 (5 días = 6 Bs) y la devolución real fue a los 7 días,
- *     se cobra 7 × 6 Bs, no 5 × 6 Bs. Es dinámico: si se reconfigura la
- *     tabla de precios, la tarifa excedente se recalcula sola.
- *
- * @param {number} actualDays     Días REALES transcurridos (sin capear).
- */
+/** Importe en la devolución real, con `actualDays` sin capear al máximo configurado. */
 function quoteReturn(actualDays, moviesCount, pricingCfg, discountsCfg) {
   const priceByDays = pricingCfg.price_by_days;
   if (!Number.isInteger(actualDays) || actualDays < 1) {
@@ -161,42 +118,26 @@ function quoteReturn(actualDays, moviesCount, pricingCfg, discountsCfg) {
   return { ...breakdown, overdue, max_days: maxDays, max_day_rate: rate };
 }
 
-/**
- * Días transcurridos entre dos fechas ISO, redondeando hacia arriba
- * (cualquier fracción de día cuenta como día completo). Mínimo 1.
- *
- * Se usa para el CÁLCULO DE ATRASO en la devolución real: si el cliente
- * tuvo la copia 12 días y 3 horas, cuenta como 13.
- */
+/** Días entre dos fechas ISO, redondeando hacia arriba (cualquier fracción
+ *  cuenta como día completo). Mínimo 1. Usado para el atraso real. */
 function daysBetween(fromISO, toISO) {
   const ms = new Date(toISO).getTime() - new Date(fromISO).getTime();
   const d = Math.ceil(ms / (24 * 60 * 60 * 1000));
   return Math.max(1, d);
 }
 
-/**
- * Número de día de calendario (en UTC) de una fecha ISO, como entero.
- * Sirve para comparar y restar fechas ignorando la hora del día.
- * (Limitación honesta: se usa UTC; para una app de un solo propietario en
- * una zona horaria fija es suficiente.)
- */
+/** Día de calendario (UTC) de una fecha ISO, como entero — para comparar
+ *  fechas ignorando la hora del día. */
 function calendarDayIndex(iso) {
   const d = new Date(iso);
   return Math.floor(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()) / (24 * 60 * 60 * 1000));
 }
 
 /**
- * Días de préstamo entre la fecha del préstamo y una FECHA DE DEVOLUCIÓN
- * PACTADA, contados como días de CALENDARIO (se ignora la hora del día).
- *
- * Motivo: al registrar el préstamo el propietario elige una fecha ("el
- * cliente devuelve el jueves"). Si se contara por milisegundos con `ceil`,
- * la misma fecha podría facturarse como 3 o 4 días según la hora exacta en
- * que se registra el préstamo — poco predecible en la pantalla "por
- * fecha". Contando por calendario: lunes -> jueves = 3 días, siempre.
- *
- * MÍNIMO 1: devolver EL MISMO DÍA del préstamo es válido y se factura como
- * 1 día (el mínimo de la tabla de precios).
+ * Días entre la fecha del préstamo y una fecha de devolución PACTADA,
+ * contados por calendario (no por milisegundos), para que "lunes ->
+ * jueves" sea siempre 3 días sin importar la hora exacta del registro.
+ * Mínimo 1: devolver el mismo día se factura como 1 día.
  */
 function calendarDaysBetween(fromISO, toISO) {
   return Math.max(1, calendarDayIndex(toISO) - calendarDayIndex(fromISO));

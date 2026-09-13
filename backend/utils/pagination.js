@@ -1,35 +1,11 @@
 /**
- * ============================================================================
- * PAGINACIÓN — normalización de `limit` / `skip` del query string
- * ============================================================================
- *
- * REGLA CENTRAL: un parámetro numérico opcional AUSENTE, vacío
- * (`?limit=`) o no numérico NUNCA debe provocar un error. Se cae a un
- * valor por defecto sensato. Solo se rechaza implícitamente (usando el
- * default) cuando el valor recibido no tiene sentido.
- *
- * Motivo concreto del bug que esto corrige:
- * `nano` v11 arma el querystring con `new URLSearchParams(qs)`, que
- * convierte cada valor con `String(valor)`. Si una capa superior pasaba
- * `limit: undefined`, se enviaba literalmente `?limit=undefined` y
- * CouchDB respondía `400 - Invalid value for integer: undefined`.
- * Centralizando el parseo aquí, las capas superiores solo manejan
- * números ya validados o el default.
- *
- *   limit -> por defecto DEFAULT_LIMIT; nunca por encima de MAX_LIMIT.
- *   skip  -> por defecto 0.
- *
- * DEFAULT_LIMIT = 50: es una app de un solo propietario con volúmenes
- * modestos; 50 documentos por página es suficiente para el uso normal y
- * evita traer toda la base sin querer. Se puede subir con `?limit=` hasta
- * MAX_LIMIT.
+ * Normaliza `limit`/`skip` del query string: ausente, vacío o no numérico
+ * nunca debe llegar a CouchDB como valor inválido (ver `listByType`,
+ * mismo motivo) — siempre cae a un default sensato en vez de fallar.
  */
 
 const DEFAULT_LIMIT = 50;
-// Tope alto: es una app de un solo propietario; el catálogo y el padrón de
-// clientes caben de sobra en una sola respuesta. El frontend pide
-// explícitamente un límite amplio para no truncar las tablas en silencio.
-const MAX_LIMIT = 1000;
+const MAX_LIMIT = 1000; // app de un solo propietario; el frontend pide límites altos para no truncar tablas.
 
 function isBlank(raw) {
   return raw === undefined || raw === null || String(raw).trim() === '';

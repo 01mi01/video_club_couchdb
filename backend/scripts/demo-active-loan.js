@@ -1,22 +1,8 @@
 /**
- * ============================================================================
- * scripts/demo-active-loan.js  —  SANITY CHECK + dato de demostración
- * ============================================================================
+ * Crea un préstamo real (no datos de prueba) y lo deja activo como dato
+ * de demostración para el frontend. No devuelve el préstamo.
  *
  *     node scripts/demo-active-loan.js
- *
- * Crea UN préstamo real (cliente real + película real, NO datos de prueba)
- * y lo DEJA ACTIVO como dato de demostración para el frontend.
- *
- * Verifica el flujo completo:
- *   1. Cotización (/api/loans/quote) con montos correctos.
- *   2. Creación (/api/loans) vía _bulk_docs.
- *   3. La copia asignada queda en "loaned".
- *   4. Se emite la factura con número correlativo y total coherente.
- *
- * NO devuelve el préstamo. NO toca los préstamos/facturas de pruebas
- * anteriores.
- * ============================================================================
  */
 
 require('dotenv').config();

@@ -1,30 +1,8 @@
 /**
- * ============================================================================
- * scripts/verify-overdue-loans.js  —  PRÉSTAMOS VENCIDOS (sanity check)
- * ============================================================================
+ * Sanity check del ciclo de vida de préstamos vencidos y copias
+ * recuperables. Datos descartables, limpiados en `finally`.
  *
  *     node scripts/verify-overdue-loans.js
- *
- * Verifica el comportamiento esperado para préstamos vencidos:
- *
- *   1. NO hay ningún proceso automático: un préstamo con `due_date` en el
- *      pasado sigue "active" y su copia sigue "loaned" indefinidamente.
- *   2. Salida manual (a): devolución TARDÍA -> `returnLoan` cierra el
- *      préstamo, marca `returned_late`, y la factura deja constancia del
- *      atraso. La copia vuelve a "available".
- *   3. Salida manual (b): BAJA POR NO DEVOLUCIÓN -> el endpoint de baja de
- *      copias con razón "no devuelto"/"pérdida"/"robo" (o
- *      `POST /api/loans/:id/write-off`) deja la copia "missing" (NO
- *      "retired": es recuperable, ver `videoService.recoverCopy`) y cierra
- *      el préstamo como "unreturned".
- *   4. Protección: una copia PRESTADA NO se puede dar de baja por una razón
- *      que implique que ya volvió físicamente (ej. "daño irreparable") sin
- *      antes registrar su devolución.
- *
- * DATOS: 100% descartables, creados y borrados por el propio script
- * (género/película/cliente marcados `TEST_DELETE_ME_...`). Limpieza total
- * en `finally`, aunque una aserción falle.
- * ============================================================================
  */
 
 require('dotenv').config();
@@ -96,9 +74,7 @@ async function main() {
     return res;
   }
 
-  /* =====================================================================
-   * 1) SIN PROCESO AUTOMÁTICO
-   * ==================================================================== */
+  // 1) Sin proceso automático.
   try {
     const { loan } = await crearPrestamoVencido('c1', 10, 2);
     const venceEn = new Date(loan.due_date).getTime();
@@ -127,9 +103,7 @@ async function main() {
     record(1, 'Préstamo vencido: sin proceso automático', false, `PROBLEMA: ${e.message}`);
   }
 
-  /* =====================================================================
-   * 2) SALIDA (a): DEVOLUCIÓN TARDÍA
-   * ==================================================================== */
+  // 2) Salida (a): devolución tardía.
   try {
     const { loan } = await crearPrestamoVencido('c2', 12, 2);
     const ret = await loanService.returnLoan(loan._id, {}); // return_date = ahora
@@ -155,9 +129,7 @@ async function main() {
     record(2, 'Salida manual (a): devolución tardía', false, `PROBLEMA: ${e.message}`);
   }
 
-  /* =====================================================================
-   * 3) SALIDA (b): BAJA POR NO DEVOLUCIÓN
-   * ==================================================================== */
+  // 3) Salida (b): baja por no devolución.
   // 3.1 vía endpoint de BAJA DE COPIAS (videoService.retireCopy, razón "no devuelto")
   try {
     const { loan } = await crearPrestamoVencido('c3', 20, 3);
@@ -226,11 +198,8 @@ async function main() {
     record(4, 'Salida manual (b) vía POST /api/loans/:id/write-off + baja definitiva posterior', false, `PROBLEMA: ${e.message}`);
   }
 
-  /* =====================================================================
-   * 5) PROTECCIÓN: "daño irreparable" sobre copia prestada -> rechazado
-   *    (a diferencia de "robo"/"pérdida"/"no devuelto", que SÍ se aceptan
-   *    directamente sobre una copia prestada — ver pasos 3 y 3.2 arriba)
-   * ==================================================================== */
+  // 5) Protección: "daño irreparable" sobre copia prestada se rechaza
+  // (a diferencia de "robo"/"pérdida"/"no devuelto", ver pasos 3 y 3.2).
   try {
     // c1 sigue prestada (del test 1). Intentar baja por "daño irreparable"
     // debe fallar: esa razón supone que la copia ya volvió físicamente.

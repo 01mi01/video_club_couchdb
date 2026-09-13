@@ -57,11 +57,7 @@ async function update(id, body) {
   });
 }
 
-/** DESACTIVAR / REACTIVAR — mismo patrón no-destructivo que género (ver
- *  `genreService.deactivate`): sin DELETE real. Efecto aplicado en
- *  `clientService.normalize`: una zona inactiva no se puede asignar a
- *  clientes nuevos ni agregar en una edición, pero los clientes que ya la
- *  referencian la siguen mostrando sin problema. */
+/** Desactivar/reactivar, mismo patrón que género. Efecto aplicado en `clientService.normalize`. */
 async function deactivate(id) {
   await zoneRepo.getById(id);
   return zoneRepo.update(id, (doc) => {

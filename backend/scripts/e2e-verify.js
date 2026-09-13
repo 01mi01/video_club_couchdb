@@ -1,31 +1,9 @@
 /**
- * ============================================================================
- * scripts/e2e-verify.js  —  VERIFICACIÓN END-TO-END DEL FLUJO FUNCIONAL
- * ============================================================================
+ * Verificación end-to-end del flujo funcional contra los datos reales ya
+ * cargados. No deja datos de prueba: préstamos/facturas se revierten al
+ * final (excepto la baja de copia de la prueba 6, que queda permanente).
  *
  *     node scripts/e2e-verify.js
- *
- * Ejercita TODO el backend contra los DATOS REALES ya cargados (79
- * películas, 20 clientes), usando la capa de servicios (mismo camino que
- * las rutas HTTP; el servidor no se levanta, regla de trabajo 1).
- *
- * REGLAS DE SEGURIDAD DE ESTE SCRIPT
- *   - NO crea ni borra películas ni clientes reales.
- *   - Los préstamos/facturas creados para probar se DEVUELVEN al final
- *     (las copias quedan disponibles). Los documentos de préstamo/factura
- *     quedan como historial "returned" (estado de negocio válido); se
- *     listan sus IDs por si se quieren depurar a mano.
- *   - El cliente que se bloquea para la prueba 4 se DESBLOQUEA al terminar.
- *   - El cambio de configuración de la prueba 7 se REVIERTE (se elimina el
- *     documento de config para volver al estado "sin persistir / defaults"
- *     que había antes).
- *   - EXCEPCIÓN deliberada: la prueba 6 (baja de copia) es permanente por
- *     naturaleza. Se hace sobre una película de 5 copias -> queda con 4.
- *
- * Cada verificación se reporta por separado. Nada corta la corrida: si una
- * asa falla se registra y se sigue, para que la limpieza/restauración
- * siempre ocurra y se vean los 7 resultados juntos.
- * ============================================================================
  */
 
 require('dotenv').config();
@@ -62,9 +40,7 @@ async function rawGet(id) {
   try { return await db.get(id); } catch (e) { if (e.statusCode === 404) return null; throw e; }
 }
 
-/* ===========================================================================
- * 1) BÚSQUEDA DE PELÍCULAS
- * ======================================================================== */
+// 1) Búsqueda de películas.
 async function v1_busqueda() {
   const lines = [];
 
@@ -149,9 +125,7 @@ async function v1_busqueda() {
     lines.join('\n'));
 }
 
-/* ===========================================================================
- * 2) COTIZACIÓN Y CREACIÓN DE PRÉSTAMOS + DESCUENTOS
- * ======================================================================== */
+// 2) Cotización y creación de préstamos + descuentos.
 async function v2_prestamos(clienteId, videoIds) {
   const lines = [];
 
@@ -205,9 +179,7 @@ async function v2_prestamos(clienteId, videoIds) {
   record(2, 'Cotización y creación de préstamos con descuentos por cantidad (0% / 5% / 10%)', true, lines.join('\n'));
 }
 
-/* ===========================================================================
- * 3) LÍMITE DE DÍAS DE PRÉSTAMO
- * ======================================================================== */
+// 3) Límite de días de préstamo.
 async function v3_maxDias(clienteId, videoId) {
   const cfg = await configService.effectiveConfig();
   const max = cfg.max_days;
@@ -238,9 +210,7 @@ async function v3_maxDias(clienteId, videoId) {
       `Préstamo de ${max} días (borde) -> aceptado en cotización. Correcto.`);
 }
 
-/* ===========================================================================
- * 4) BLOQUEO DE CLIENTE
- * ======================================================================== */
+// 4) Bloqueo de cliente.
 async function v4_bloqueo(clienteId, videoId) {
   const antes = await clientRepo.getById(clienteId);
   assert(!antes.blocked.is_blocked, 'el cliente elegido para la prueba ya estaba bloqueado (aborta la prueba)');
@@ -287,9 +257,7 @@ async function v4_bloqueo(clienteId, videoId) {
       `Cliente DESBLOQUEADO al terminar (blocked.is_blocked = ${despues.blocked.is_blocked}). Estado original restaurado.`);
 }
 
-/* ===========================================================================
- * 5) FLUJO DE DEVOLUCIÓN
- * ======================================================================== */
+// 5) Flujo de devolución.
 async function v5_devolucion(clienteId, videoId) {
   const vAntes = await rawGet(videoId);
   const dispAntes = vAntes.copies.filter((c) => c.status === 'available').length;
@@ -343,9 +311,7 @@ async function v5_devolucion(clienteId, videoId) {
       `Factura #${facturaFinal.number} (${created.invoice._id}) total ${money(facturaFinal.total)}, ${facturaFinal.lines.length} línea(s).`);
 }
 
-/* ===========================================================================
- * 6) BAJA DE COPIA  (permanente por diseño)
- * ======================================================================== */
+// 6) Baja de copia (permanente por diseño).
 async function v6_bajaCopia(videoId) {
   const vAntes = await rawGet(videoId);
   const dispAntes = vAntes.copies.filter((c) => c.status === 'available');
@@ -384,9 +350,7 @@ async function v6_bajaCopia(videoId) {
       `NOTA: esta baja es permanente en los datos reales (quedan ${dispDespues.length} copias disponibles).`);
 }
 
-/* ===========================================================================
- * 7) CONFIGURACIÓN (cambiar -> verificar -> restaurar)
- * ======================================================================== */
+// 7) Configuración (cambiar -> verificar -> restaurar).
 async function v7_configuracion(clienteId, videoIds) {
   const items4 = videoIds.slice(0, 4).map((id) => ({ video_id: id }));
 
@@ -435,9 +399,6 @@ async function v7_configuracion(clienteId, videoIds) {
       `  RESTAURADO-> descuento ${cotFinal.pricing.discount_percent}%  total ${money(cotFinal.pricing.total_amount)}  (${restauffDetalle})`);
 }
 
-/* ===========================================================================
- * LIMPIEZA / RESTAURACIÓN
- * ======================================================================== */
 async function restaurar() {
   console.log('\n── RESTAURACIÓN ────────────────────────────────────────');
 
@@ -492,9 +453,6 @@ async function restaurar() {
   [...new Set(cleanup.loanDocs)].forEach((id) => console.log(`    - ${id}`));
 }
 
-/* ===========================================================================
- * MAIN
- * ======================================================================== */
 async function main() {
   console.log('============================================================');
   console.log(' VERIFICACIÓN END-TO-END DEL FLUJO FUNCIONAL DEL BACKEND');

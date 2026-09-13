@@ -1,27 +1,11 @@
 /**
- * Traduce al español TODOS los mensajes de validación NATIVOS del
- * navegador ("Please fill out this field", "Please match the requested
- * format", etc.) en cualquier `<input>`/`<textarea>`/`<select>` del sitio,
- * sin tener que tocar cada formulario uno por uno.
- *
- * El navegador no permite traducir directamente `validationMessage` (es
- * de solo lectura y depende del idioma del navegador/SO, no de la app),
- * pero sí expone `setCustomValidity(texto)`, que reemplaza el mensaje
- * mostrado en el globo nativo de validación. El truco:
- *
- *   1. En el evento `invalid` (se dispara antes de mostrar el globo),
- *      limpiamos cualquier mensaje custom previo y leemos `validity`
- *      (`valueMissing`, `typeMismatch`, `tooShort`, ...) para elegir el
- *      texto en español correspondiente, y lo fijamos con
- *      `setCustomValidity`.
- *   2. En `input` (mientras el usuario escribe) limpiamos el mensaje
- *      custom, para que el navegador vuelva a evaluar la validez real en
- *      el próximo intento de envío (si no se limpia, el campo queda
- *      "inválido para siempre" aunque el valor ya sea correcto).
- *
- * Un solo listener a nivel de documento (captura) cubre TODOS los
- * formularios del sitio, actuales y futuros — no depende de que cada
- * <Field>/<TextInput> lo implemente por su cuenta.
+ * Traduce al español los mensajes de validación nativos del navegador en
+ * cualquier input/textarea/select del sitio. `validationMessage` es de
+ * solo lectura, pero `setCustomValidity(texto)` reemplaza el mensaje
+ * mostrado: se fija en el evento `invalid` (según `el.validity`) y se
+ * limpia en `input` (si no, el campo queda "inválido para siempre" aunque
+ * el valor ya sea correcto). Un solo listener a nivel de documento cubre
+ * todos los formularios, sin que cada uno lo implemente por su cuenta.
  */
 function messageFor(el) {
   const v = el.validity;

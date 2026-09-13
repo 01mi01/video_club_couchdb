@@ -54,11 +54,7 @@ async function update(id, body) {
   });
 }
 
-/** DESACTIVAR / REACTIVAR — mismo patrón no-destructivo que género (ver
- *  `genreService.deactivate`): sin DELETE real, el enunciado nunca pide
- *  "eliminar" nada. Efecto aplicado en `videoService.resolveCategoryIds`:
- *  una categoría inactiva no se puede asignar a películas nuevas, pero
- *  las que ya la referencian la siguen mostrando sin problema. */
+/** Desactivar/reactivar, mismo patrón que género. Efecto aplicado en `videoService.resolveCategoryIds`. */
 async function deactivate(id) {
   await oscarRepo.getById(id);
   return oscarRepo.update(id, (doc) => {
@@ -76,25 +72,9 @@ async function activate(id) {
 }
 
 /**
- * BÚSQUEDA POR NOMINACIÓN AL OSCAR EN CUALQUIER IDIOMA (problema complejo
- * resuelto — ver `videoService.search`).
- *
- * Resuelve un texto (inglés o español, con o sin acentos/mayúsculas) al o
- * los IDs de categoría cuyo `search_names` contiene ese texto plegado
- * EXACTO. Filtrado EN MEMORIA sobre la colección completa de categorías:
- * es un catálogo chico (~24 documentos reales), así que un índice Mango
- * dedicado aquí sería decorativo — el índice que sí importa
- * (`idx-oscar-nominations`) protege la colección grande (videos), donde
- * `videoService.search` usa los IDs que esta función devuelve.
- *
- * IMPORTANTE: coincidencia EXACTA, no subcadena. A diferencia de la
- * búsqueda de títulos de película (donde SÍ interesa "nomadas" dentro de
- * "Los Nómadas"), aquí el texto viene de un selector con categorías
- * FIJAS (frontend) — un `$regex`/`includes` de subcadena haría que
- * "mejor pelicula" también matcheara "Mejor Película DE ANIMACIÓN" o
- * "... INTERNACIONAL" (ambas contienen esa subcadena), devolviendo
- * películas de categorías que el usuario nunca pidió. Bug real detectado
- * y corregido durante la verificación end-to-end de esta migración.
+ * Resuelve texto (ES o EN) a IDs de categoría cuyo `search_names` lo
+ * contiene EXACTO, no como subcadena. Filtrado en memoria — catálogo
+ * chico, un índice Mango acá sería decorativo.
  */
 async function findIdsByText(text) {
   const needle = foldForSearch(text);

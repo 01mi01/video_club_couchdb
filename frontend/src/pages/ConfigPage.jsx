@@ -6,17 +6,9 @@ import ConfirmDialog from '../components/ConfirmDialog.jsx';
 import { useNavGuard } from '../context/NavGuardContext.jsx';
 import { money } from '../lib/format.js';
 
-// ============================================================================
-// CONFIGURACIÓN — Gestión de Préstamos 2 y 3 del enunciado:
-//   2. "Definir y modificar costos por día de préstamo (configurable)."
-//   3. "Definir y modificar descuentos por cantidad de películas (configurable)."
-// Ambos puntos están cubiertos por esta pantalla (tabla de precios por día +
-// tramos de descuento por cantidad). El respaldo de la regla "no deben
-// permitirse préstamos mayores a los días configurados" vive en el backend
-// (`pricing.assertDaysAllowed`, aplicado en `loanService.createLoan`); aquí
-// solo se EXPLICA para que quede claro por qué agregar/quitar un día cambia
-// el máximo permitido.
-// ============================================================================
+// Configuración de precios por día y descuentos por cantidad. La regla "no
+// se permiten préstamos mayores a los días configurados" se valida en el
+// backend (pricing.assertDaysAllowed); acá solo se edita la tabla.
 
 const snapshot = (prices, tiers) => JSON.stringify({ prices, tiers });
 

@@ -1,35 +1,9 @@
 /**
- * ============================================================================
- * scripts/migrate-client-zones.js  —  EJECUCIÓN MANUAL, UNA SOLA VEZ
- * ============================================================================
+ * Introduce la entidad Zona: crea el catálogo (ZONES) y asigna a cada
+ * cliente real su `address.zone_id` (mapa CLIENT_ZONE). Idempotente.
  *
- * Introduce la entidad ZONA (ver `repositories/zoneRepository.js`) y migra
- * a los 20 clientes reales ya cargados de `address.geo` (lat/lng tecleados
- * a mano) a `address.zone_id` (referencia a una zona preconfigurada).
- *
- * QUÉ HACE
- *   1. Crea (si no existen ya, por `name`) las zonas del catálogo curado
- *      (mapa ZONES abajo: barrios específicos de La Paz, Santa Cruz de la
- *      Sierra y Cochabamba, con nombre + lat/lng reales).
- *   2. Para cada cliente real (mapa CLIENT_ZONE, por `_id`), asigna
- *      `address.zone_id` con la zona correspondiente y actualiza
- *      `address.text` con SOLO la calle/número (sin repetir el nombre de
- *      la zona ahí: la UI arma la dirección completa a mostrar como
- *      `address.text` + el nombre de la zona referenciada — ver
- *      `lib/format.js > fullAddress` en el frontend).
- *
- * Uso:
- *   node scripts/migrate-client-zones.js             (DRY-RUN: solo reporta)
- *   node scripts/migrate-client-zones.js --apply      (crea zonas + migra clientes)
- *
- * IDEMPOTENTE: si un cliente ya tiene el `zone_id`/`address.text` esperado,
- * se saltea. Las zonas se reutilizan por nombre si ya existen (no duplica).
- *
- * VERIFICACIÓN ESTRICTA POR CLIENTE: tras cada `update` se relee el
- * documento YA GUARDADO en CouchDB y se compara contra lo esperado
- * (`zone_id` correcto, `address.text` correcto). Si algo no cuadra, se
- * aborta con el detalle del cliente afectado.
- * ============================================================================
+ *     node scripts/migrate-client-zones.js             (dry-run)
+ *     node scripts/migrate-client-zones.js --apply
  */
 
 require('dotenv').config();

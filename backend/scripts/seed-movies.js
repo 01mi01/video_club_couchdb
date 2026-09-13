@@ -1,48 +1,8 @@
 /**
- * ============================================================================
- * scripts/seed-movies.js  —  CARGA DE PELÍCULAS REALES (ejecución manual)
- * ============================================================================
- *
- * Autorizado por CLAUDE.md, sección "Contenido de datos — películas y
- * clientes" + regla de trabajo 2. NO son datos de prueba descartables:
- * es el catálogo real de la base.
+ * Carga el catálogo real de películas vía `videoService.create`.
+ * Idempotente por `display_title` + `release_year`.
  *
  *     node scripts/seed-movies.js
- *
- * QUÉ HACE
- *   1. Lee los géneros reales de la base (equivalente a GET /api/genres) y
- *      arma un mapa nombre -> _id. NO se inventan IDs.
- *   2. Crea cada película con `videoService.create(...)`, exactamente el
- *      mismo camino de validación/normalización que usa POST /api/videos
- *      (el servidor HTTP no se levanta; regla de trabajo 1).
- *   3. Es idempotente: si ya existe un video con el mismo `display_title` y
- *      `release_year`, lo salta (re-ejecutar no duplica).
- *   4. Al final informa cuántas películas quedaron por género y verifica el
- *      mínimo de 2 exigido por CLAUDE.md.
- *
- * CRITERIOS APLICADOS EN LA SELECCIÓN (CLAUDE.md)
- *   - Mínimo 2 películas por cada uno de los 28 géneros. Varias películas
- *     cuentan para más de un género vía `genre_ids[]` cuando aplica de
- *     verdad (p.ej. "Parasite" -> Suspenso + Comedia Negra + Drama +
- *     Sátira + Crimen).
- *   - Prioridad a cine premiado/nominado en Cannes cuando encaja con el
- *     género: Palma de Oro (Parasite, El árbol de la vida, El pianista,
- *     Dancer in the Dark, The Square, Triangle of Sadness, Tío Boonmee,
- *     Titane, Bailar en la oscuridad), premios de actuación/dirección
- *     (In the Mood for Love, La Pianiste, Mulholland Drive, Drive, Carol,
- *     Drive My Car), Un Certain Regard (Dogtooth), Gran Premio
- *     (Oldboy, Un prophète).
- *   - `oscar_nominations[]` / `oscar_wins[]` reales y verificables (es un
- *     requisito funcional explícito del profesor, no decorativo).
- *   - Mezcla deliberada: cine de autor / festivalero / slow cinema
- *     (Malick, Haneke, Weerasethakul, Wong Kar-wai, Hamaguchi, Tarr-adjacent)
- *     junto con títulos mainstream premiados (The Dark Knight, Mad Max:
- *     Fury Road, LOTR, La La Land, Dune-adjacent Villeneuve).
- *   - Nada en blanco y negro / nada anterior a 1986; sin gore de
- *     explotación (el body horror incluido es de autor: Cronenberg,
- *     Ducournau, Garland).
- *   - `units_acquired` variado entre 1 y 5 (no siempre el mismo número).
- * ============================================================================
  */
 
 require('dotenv').config();

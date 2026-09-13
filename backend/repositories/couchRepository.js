@@ -1,32 +1,11 @@
 /**
- * ============================================================================
- * REPOSITORIO GENÉRICO DE COUCHDB  (cliente `nano`)
- * ============================================================================
+ * Repositorio genérico de CouchDB (cliente `nano`): único punto que habla
+ * con `nano` directamente. Los servicios piden operaciones con significado
+ * ("inserta", "trae por prefijo", "bulk"), nunca usan `nano` directamente.
  *
- * Todas las llamadas crudas a CouchDB pasan por aquí. Las capas de
- * servicio nunca hablan con `nano` directamente: piden operaciones con
- * significado ("inserta", "trae por prefijo", "bulk").
- *
- * DECISIONES DE MODELADO QUE SE APOYAN EN ESTE ARCHIVO
- * ---------------------------------------------------------------------------
- * 1. IDs CON PREFIJO DE TIPO  (`genre:<uuid>`, `video:<uuid>`, ...).
- *    CouchDB guarda TODOS los documentos en una sola base
- *    (`video_club_db`); no hay "tablas" ni "colecciones". Para listar
- *    "todos los videos" hay dos caminos:
- *      a) `_find` con `{ selector: { type: "video" } }`  -> requiere un
- *         índice sobre `type`, y sin él CouchDB devuelve un warning de
- *         consulta no indexada (full scan).
- *      b) `_all_docs` con rango `startkey/endkey` sobre el prefijo del
- *         `_id`  -> usa el B-tree primario que SIEMPRE existe, sin crear
- *         ningún índice extra.
- *    Elegimos (b). Así los únicos índices Mango del proyecto son los que
- *    sirven una búsqueda que el profesor pidió explícitamente (nombre,
- *    género, actor, nominación al Oscar) y no hay índices "decorativos".
- *
- * 2. CAMPO `type` redundante dentro del documento: se mantiene igual,
- *    porque es barato y hace los documentos autoexplicativos al leerlos
- *    en Fauxton, pero NO se indexa.
- * ============================================================================
+ * IDs con prefijo de tipo (`genre:<uuid>`, `video:<uuid>`, ...): listar por
+ * tipo usa `_all_docs` sobre ese prefijo (índice primario), no un índice
+ * Mango sobre `type`.
  */
 
 const { randomUUID } = require('crypto');
@@ -109,19 +88,15 @@ async function remove(id, { label = 'Documento' } = {}) {
 }
 
 /**
- * Lista todos los documentos cuyo `_id` empieza por `${type}:` usando
- * `_all_docs` sobre el índice primario (sin índice secundario).
- * `￰` es el mayor code point posible: `type:` .. `type:￰`
- * cubre todo el rango del prefijo.
+ * Lista documentos cuyo `_id` empieza por `${type}:` vía `_all_docs` sobre
+ * el índice primario. `￰` es el mayor code point posible, así
+ * `type:` .. `type:￰` cubre todo el rango del prefijo.
+ *
+ * `limit`/`skip` se agregan a la query SOLO si son números finitos: `nano`
+ * serializa cualquier valor con `String()`, así que un `limit: undefined`
+ * llegaría a CouchDB como `?limit=undefined` -> 400.
  */
 async function listByType(type, { limit, skip } = {}) {
-  // CONSTRUCCIÓN CONDICIONAL DE LA QUERY.
-  // `nano` v11 serializa el querystring con `new URLSearchParams(qs)`, que
-  // convierte CUALQUIER valor con `String(valor)`. Si aquí se colara
-  // `limit: undefined`, CouchDB recibiría `?limit=undefined` y devolvería
-  // `400 - Invalid value for integer: undefined`. Por eso `limit`/`skip`
-  // se agregan SOLO cuando son números finitos; ausentes = sin límite,
-  // que es justo el comportamiento por defecto de `_all_docs`.
   const query = {
     include_docs: true,
     startkey: `${type}:`,
@@ -135,15 +110,13 @@ async function listByType(type, { limit, skip } = {}) {
 }
 
 /**
- * Consulta Mango (`_find`). SOLO se usa para las búsquedas que tienen un
- * índice creado a propósito (ver `scripts/create-indexes.js`).
- * Si CouchDB responde con `warning` (consulta sin índice) se registra en
- * consola: sirve para demostrar en el video la diferencia indexado vs no.
+ * Consulta Mango (`_find`), solo para búsquedas con índice creado a
+ * propósito (ver `scripts/create-indexes.js`). Si CouchDB responde con
+ * `warning` (sin índice), se registra en consola.
  */
 async function find(selector, options = {}) {
-  // Se desestructura `limit` aparte para que un `limit: undefined` en
-  // `options` NO pise el valor por defecto vía el spread (mismo problema
-  // de `undefined` serializado que en `listByType`).
+  // `limit` se desestructura aparte para que `undefined` no pise el
+  // default vía el spread (mismo problema que en listByType).
   const { limit, ...rest } = options;
   const query = { selector, limit: Number.isFinite(limit) ? limit : 100, ...rest };
   const res = await db.find(query);
@@ -154,15 +127,11 @@ async function find(selector, options = {}) {
 }
 
 /**
- * `_bulk_docs`: escribe/actualiza varios documentos en UNA sola petición.
- *
- * PSEUDO-ATOMICIDAD (Parte A: Atomicidad / Transacciones):
- * CouchDB NO tiene transacciones multi-documento. `_bulk_docs` NO es
- * "todo o nada": cada documento del lote se aplica de forma
- * independiente y puede fallar por su cuenta (típicamente un 409 si su
- * `_rev` quedó viejo). Por eso esta función DEVUELVE la lista de
- * resultados por documento y marca `hasErrors`; quien la llama debe
- * inspeccionar y compensar / reintentar (ver `loanService.js`).
+ * `_bulk_docs`: escribe varios documentos en una sola petición, pero NO es
+ * atómico — cada documento puede fallar por su cuenta (típicamente 409 por
+ * `_rev` viejo). Por eso devuelve los resultados por documento y marca
+ * `hasErrors`; quien llama debe inspeccionar y compensar/reintentar (ver
+ * `loanService.js`).
  */
 async function bulkDocs(docs) {
   const res = await db.bulk({ docs });
@@ -176,16 +145,9 @@ async function bulkDocs(docs) {
 }
 
 /**
- * Contador monotónico (correlativo) SIN secuencias nativas.
- *
- * CouchDB no tiene `AUTO_INCREMENT` ni `SEQUENCE`. Un correlativo (p.ej.
- * el número de factura) se implementa como un documento
- * `counter:<name>` con `{ value }` y se incrementa con el mismo patrón
- * MVCC: leer -> +1 -> escribir -> si 409 (otro préstamo pidió número al
- * mismo tiempo) -> reintentar. Es exactamente el caso de uso para el
- * que sirve el control optimista.
- *
- * Devuelve el nuevo valor ya reservado.
+ * Contador monotónico (ej. número de factura) sin `AUTO_INCREMENT` nativo:
+ * documento `counter:<name>` con `{ value }`, incrementado con el mismo
+ * patrón MVCC (leer -> +1 -> escribir -> 409 -> reintentar).
  */
 async function nextSequence(name) {
   const id = `counter:${name}`;

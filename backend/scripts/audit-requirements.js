@@ -1,20 +1,8 @@
 /**
- * ============================================================================
- * scripts/audit-requirements.js  —  AUDITORÍA DE CUMPLIMIENTO (enunciado)
- * ============================================================================
+ * Auditoría de cumplimiento del enunciado, end-to-end contra los servicios
+ * reales. Datos descartables (`AUDIT_DELETE_ME_*`), limpiados en `finally`.
  *
  *     node scripts/audit-requirements.js
- *
- * Recorre CADA requisito funcional del enunciado del profesor y lo prueba
- * end-to-end contra los servicios reales (mismo camino que las rutas
- * HTTP). Para cada regla explícita ("no préstamos > días configurados",
- * "cliente bloqueado no renta", etc.) se verifica el caso feliz Y el
- * rechazo.
- *
- * Datos: se crean entidades descartables marcadas `AUDIT_DELETE_ME_*` y se
- * eliminan al final (bloque finally), incluso si una aserción falla. NO se
- * tocan películas / clientes reales.
- * ============================================================================
  */
 
 require('dotenv').config();
@@ -82,11 +70,9 @@ async function main() {
   const g2 = await genreService.create({ name: `${RUN}_Comedia`, description: 'descartable 2' });
   created.genres.push(g1._id, g2._id);
 
-  /* =====================================================================
-   * GESTIÓN DE VIDEOS
-   * ==================================================================== */
+  // --- Gestión de videos ---------------------------------------------------
 
-  // ---- V1: Registrar un nuevo video con TODOS los campos ----------------
+  // V1: Registrar un nuevo video con todos los campos.
   req('V1', 'Registrar nuevo video (duración, géneros múltiples, títulos alt/original/inglés, año, Oscars nominados y ganados, actores, costo DVD, unidades)');
   let video;
   await expectOk('POST /api/videos crea el video con todos los campos', async () => {
@@ -174,11 +160,9 @@ async function main() {
   await expectReject('rechaza baja sin razón', () => videoService.retireCopy(video._id, 'c6', { reason: '' }), /reason|razón/i);
   await expectReject('rechaza baja de copia ya dada de baja', () => videoService.retireCopy(video._id, 'c8', { reason: 'robo' }), /ya está dada de baja/i);
 
-  /* =====================================================================
-   * GESTIÓN DE CLIENTES
-   * ==================================================================== */
+  // --- Gestión de clientes ---------------------------------------------------
 
-  // ---- C1: Registrar nuevos clientes con todos los campos --------------
+  // C1: Registrar nuevos clientes con todos los campos.
   req('C1', 'Registrar nuevos clientes (nombre + apellidos paterno/materno, celular, correo, nacimiento, dirección, geolocalización, fecha de registro)');
 
   // Zona de prueba: la geolocalización de la dirección ahora se resuelve
@@ -294,11 +278,9 @@ async function main() {
   });
   await expectReject('rechaza desbloquear un cliente no bloqueado', () => clientService.unblock(client._id), /no está bloqueado/i);
 
-  /* =====================================================================
-   * GESTIÓN DE PRÉSTAMOS
-   * ==================================================================== */
+  // --- Gestión de préstamos ---------------------------------------------------
 
-  // ---- P1: Buscar película por nombre / género / actor / nominación ---
+  // P1: Buscar película por nombre / género / actor / nominación.
   req('P1', 'Buscar película por nombre, género, actor o nominación al Oscar (MUY IMPORTANTE)');
   await expectOk('búsqueda por NOMBRE (insensible a acentos): "alt dos" encuentra "Alt Dós"', async () => {
     const res = await videoService.search({ title: `${RUN} alt dos` });

@@ -1,32 +1,9 @@
 /**
- * ============================================================================
- * scripts/migrate-oscar-categories.js  —  EJECUCIÓN MANUAL, UNA SOLA VEZ
- * ============================================================================
+ * Normaliza `oscar_nominations[]`/`oscar_wins[]` de strings libres en
+ * inglés a IDs de `oscar_category`. Idempotente.
  *
- * Normaliza `oscar_nominations[]` / `oscar_wins[]` de las películas reales
- * ya cargadas: de strings libres en inglés ("Best Picture") a IDs de un
- * documento `oscar_category` propio ({ name_en, name_es }), mismo patrón
- * que género. Resuelve un problema real: antes la búsqueda por nominación
- * solo funcionaba en inglés; el profesor probablemente busca en español
- * ("Mejor Película") — ver `oscarCategoryService.findIdsByText` y
- * `videoService.search`.
- *
- * Uso:
- *   node scripts/migrate-oscar-categories.js             (DRY-RUN: solo reporta, no escribe nada)
- *   node scripts/migrate-oscar-categories.js --apply      (crea categorías + migra los videos)
- *
- * IDEMPOTENTE: se puede volver a correr con --apply sin duplicar
- * categorías (reutiliza las que ya existan por `name_en`) ni romper
- * videos ya migrados (si `oscar_nominations`/`oscar_wins` ya son IDs
- * `oscar_category:...`, ese video se salta).
- *
- * VERIFICACIÓN ESTRICTA POR PELÍCULA: para cada video migrado se relee el
- * documento YA GUARDADO y se compara, categoría por categoría, contra lo
- * que debía quedar (los IDs resueltos de los strings originales, más el
- * merge "todo lo ganado cuenta como nominado" que ya aplicaba antes y
- * sigue aplicando ahora en `videoService`). Si algo no cuadra, se aborta
- * con el detalle del video afectado — nunca se sigue en silencio.
- * ============================================================================
+ *     node scripts/migrate-oscar-categories.js             (dry-run)
+ *     node scripts/migrate-oscar-categories.js --apply
  */
 
 require('dotenv').config();
